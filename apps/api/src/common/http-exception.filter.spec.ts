@@ -1,4 +1,8 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import type { ErrorEnvelope } from '@gex/shared';
 import { ZodError, z } from 'zod';
 import { AppException, HttpExceptionFilter } from './http-exception.filter';
@@ -70,6 +74,25 @@ describe('HttpExceptionFilter', () => {
 
   it('maps a Nest NotFoundException to NOT_FOUND', () => {
     expect(capture(new NotFoundException()).body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('maps a Nest BadRequestException to VALIDATION_ERROR at 400', () => {
+    const { status, body } = capture(
+      new BadRequestException('payload inválido'),
+    );
+
+    expect(status).toBe(400);
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('maps a Nest ConflictException to the generic CONFLICT at 409', () => {
+    // 409 cobre mais de um tipo de conflito (nota duplicada, transição de
+    // status inválida etc.); um ConflictException genérico não carrega qual
+    // dos dois é, então cai no código genérico, não em DUPLICATE_INVOICE.
+    const { status, body } = capture(new ConflictException('conflito'));
+
+    expect(status).toBe(409);
+    expect(body.error.code).toBe('CONFLICT');
   });
 
   it('maps an unknown error to a 500 without leaking its message', () => {
