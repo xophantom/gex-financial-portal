@@ -6,6 +6,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import type { ErrorCode, ErrorDetail } from '@gex/shared';
+import type { Response } from 'express';
 import { ZodError } from 'zod';
 
 export class AppException extends Error {
@@ -31,7 +32,7 @@ const STATUS_TO_CODE: Record<number, ErrorCode> = {
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
-    const response = host.switchToHttp().getResponse();
+    const response = host.switchToHttp().getResponse<Response>();
 
     if (exception instanceof AppException) {
       response.status(exception.status).json({
