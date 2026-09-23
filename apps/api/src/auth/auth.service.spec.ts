@@ -47,8 +47,30 @@ async function captureRejection(
 }
 
 beforeAll(async () => {
+  // AuthService agora exige JWT_REFRESH_SECRET na construção (fix round 1:
+  // sem fallback, para não colapsar access e refresh token na mesma chave
+  // quando a env var falta). build() constrói um AuthService de verdade em
+  // cada teste, então isto precisa estar setado antes do primeiro deles.
+  process.env.JWT_REFRESH_SECRET = 'auth-service-spec-refresh-secret';
   user.passwordHash = await argon2.hash('GexRequester123!', {
     type: argon2.argon2id,
+  });
+});
+
+describe('AuthService construction', () => {
+  // Task 10 lesson, applied to config instead of wiring: a guard that exists
+  // but is silently bypassable protects nothing. Sem este teste, remover a
+  // checagem (ou reintroduzir um fallback) devolveria a suíte inteira ao
+  // verde, porque nenhum outro teste aqui prova que a env var é obrigatória.
+  it('refuses to construct without JWT_REFRESH_SECRET', () => {
+    const saved = process.env.JWT_REFRESH_SECRET;
+    delete process.env.JWT_REFRESH_SECRET;
+
+    try {
+      expect(() => build(user)).toThrow(/JWT_REFRESH_SECRET/);
+    } finally {
+      process.env.JWT_REFRESH_SECRET = saved;
+    }
   });
 });
 

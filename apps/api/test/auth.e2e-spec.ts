@@ -11,6 +11,11 @@ interface ErrorBody {
   error: { code: string; message: string };
 }
 
+interface TokenPairBody {
+  access_token: string;
+  refresh_token: string;
+}
+
 let app: TestApp;
 
 beforeAll(async () => {
@@ -112,5 +117,43 @@ describe('role-based authorization on a running route', () => {
       .get('/requests')
       .set('Authorization', `Bearer ${forged}`)
       .expect(401);
+  });
+});
+
+// Fix round 1: @nestjs/jwt cai de volta para o secret padrão do módulo
+// (JWT_SECRET) quando `secret` é `undefined` — verificado lendo
+// jwt.service.js diretamente e reproduzido num script isolado. Isso
+// colapsaria access e refresh token na mesma chave se JWT_REFRESH_SECRET
+// nunca fosse validado. Estes dois testes provam, contra o app rodando de
+// verdade (helpers.ts usa um JWT_SECRET e um JWT_REFRESH_SECRET distintos),
+// que as duas chaves continuam genuinamente separadas.
+describe('access and refresh tokens use distinct secrets', () => {
+  it('rejects a refresh token used as an access token', async () => {
+    const login = await request(app.server)
+      .post('/auth/login')
+      .send({ email: 'financeiro@gex.test', password: 'GexFinance123!' });
+
+    const { refresh_token: refreshToken } = login.body as TokenPairBody;
+
+    await request(app.server)
+      .get('/requests')
+      .set('Authorization', `Bearer ${refreshToken}`)
+      .expect(401);
+  });
+
+  it('rejects an access token used as a refresh token', async () => {
+    const login = await request(app.server)
+      .post('/auth/login')
+      .send({ email: 'financeiro@gex.test', password: 'GexFinance123!' });
+
+    const { access_token: accessToken } = login.body as TokenPairBody;
+
+    const response = await request(app.server)
+      .post('/auth/refresh')
+      .send({ refresh_token: accessToken })
+      .expect(401);
+
+    const body = response.body as ErrorBody;
+    expect(body.error.code).toBe('UNAUTHENTICATED');
   });
 });

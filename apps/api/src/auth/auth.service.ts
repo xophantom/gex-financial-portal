@@ -4,12 +4,22 @@ import argon2 from 'argon2';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { AppException } from '../common/http-exception.filter';
+import { resolveJwtRefreshSecret } from './jwt-secrets';
 
 const MAX_ATTEMPTS = 10;
 const WINDOW_SECONDS = 300;
 
 @Injectable()
 export class AuthService {
+  // Campo, não leitura inline em cada método: resolveJwtRefreshSecret() lança
+  // se a env var não estiver setada, e um campo roda na construção do
+  // provider (mesmo momento em que JwtStrategy valida JWT_SECRET) — falha no
+  // boot, não silenciosamente na primeira chamada a login()/refresh(). Também
+  // evita passar `secret: undefined` para signAsync/verifyAsync: o
+  // @nestjs/jwt cai de volta para o secret padrão do módulo (JWT_SECRET)
+  // nesse caso, o que colapsaria access e refresh token na mesma chave.
+  private readonly refreshSecret = resolveJwtRefreshSecret();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
@@ -51,7 +61,7 @@ export class AuthService {
   async refresh(refreshToken: string) {
     const payload = await this.jwt
       .verifyAsync<{ sub: string }>(refreshToken, {
-        secret: process.env.JWT_REFRESH_SECRET,
+        secret: this.refreshSecret,
       })
       .catch(() => {
         throw new AppException('UNAUTHENTICATED', 'Sessão expirada', 401);
@@ -78,7 +88,7 @@ export class AuthService {
       access_token: await this.jwt.signAsync(claims, { expiresIn: '15m' }),
       refresh_token: await this.jwt.signAsync(claims, {
         expiresIn: '7d',
-        secret: process.env.JWT_REFRESH_SECRET,
+        secret: this.refreshSecret,
       }),
       user: {
         id: user.id,

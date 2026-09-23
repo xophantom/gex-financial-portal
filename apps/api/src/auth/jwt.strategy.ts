@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PrismaService } from '../prisma/prisma.service';
+import { resolveJwtSecret } from './jwt-secrets';
 
 interface JwtPayload {
   sub: string;
@@ -13,17 +14,6 @@ export interface AuthenticatedUser {
   role: string;
   name: string;
   email: string;
-}
-
-// Mesmo padrão de fallback do RedisService (REDIS_URL) e do ClockService
-// (APP_TIMEZONE): um valor de desenvolvimento documentado em .env.example,
-// não um segredo de produção — em produção a env var real sempre sobrepõe.
-// Função, não constante de módulo: precisa ler process.env no momento em
-// que o Nest instancia o provider (compile()/create()), não em quando este
-// arquivo é importado — testes só definem a env var depois de subir os
-// containers descartáveis, e o import de AppModule acontece antes disso.
-export function resolveJwtSecret(): string {
-  return process.env.JWT_SECRET ?? 'challenge_only_change_me';
 }
 
 @Injectable()

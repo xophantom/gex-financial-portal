@@ -4,7 +4,8 @@ import { PassportModule } from '@nestjs/passport';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtGuard } from './jwt.guard';
-import { JwtStrategy, resolveJwtSecret } from './jwt.strategy';
+import { JwtStrategy } from './jwt.strategy';
+import { resolveJwtSecret } from './jwt-secrets';
 import { RolesGuard } from './roles.guard';
 
 @Module({
