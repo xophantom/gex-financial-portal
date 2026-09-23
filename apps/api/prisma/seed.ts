@@ -18,7 +18,7 @@ const CATEGORY_BY_LABEL = new Map<string, RequestCategory>([
   ['INFRAESTRUTURA', 'INFRAESTRUTURA'],
 ])
 
-function toRequestCategory(label: string): RequestCategory {
+export function toRequestCategory(label: string): RequestCategory {
   const category = CATEGORY_BY_LABEL.get(label)
   if (!category) {
     throw new Error(`unknown request category: ${label}`)
