@@ -33,6 +33,17 @@ describe('seed', () => {
   })
 
   it('stores every request field exactly as provided', async () => {
+    // category compara contra a coluna crua, não contra toRequestCategory():
+    // comparar com o resultado da própria função sob teste é tautológico —
+    // se um mapeamento em CATEGORY_BY_LABEL estiver trocado, os dois lados
+    // do assert erram do mesmo jeito e o teste passa com o dado corrompido.
+    // A coluna crua (o valor que o @map grava, com cedilha) não passa por
+    // esse mapeamento, então uma troca no Map quebra este assert.
+    const rawCategories = await prisma.$queryRaw<Array<{ id: string; category: string }>>`
+      SELECT id, category::text AS category FROM requests
+    `
+    const rawCategoryById = new Map(rawCategories.map((row) => [row.id, row.category]))
+
     for (const row of read('seed_requests.json')) {
       const stored = await prisma.request.findUniqueOrThrow({ where: { id: row.id } })
 
@@ -43,7 +54,7 @@ describe('seed', () => {
       expect(Number(stored.amountCents)).toBe(row.amount_cents)
       expect(stored.competence).toBe(row.competence)
       expect(stored.dueDate.toISOString().slice(0, 10)).toBe(row.due_date)
-      expect(stored.category).toBe(toRequestCategory(row.category))
+      expect(rawCategoryById.get(row.id)).toBe(row.category)
       expect(stored.description).toBe(row.description)
       expect(stored.status).toBe(row.status)
       expect(stored.rejectionReason).toBe(row.rejection_reason)
