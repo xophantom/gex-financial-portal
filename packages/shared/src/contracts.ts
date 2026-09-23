@@ -1,7 +1,8 @@
 import { z } from 'zod'
-import { isValidCnpj, normalizeCnpj } from './cnpj'
-import { parseCompetenceInput } from './competence'
-import { REQUEST_STATUSES } from './status'
+import { isValidCnpj, normalizeCnpj } from './cnpj.js'
+import { parseCompetenceInput } from './competence.js'
+import { REQUEST_STATUSES } from './status.js'
+import { isCalendarDate } from './date.js'
 
 export const REQUEST_CATEGORIES = [
   'SOFTWARE',
@@ -11,13 +12,6 @@ export const REQUEST_CATEGORIES = [
 ] as const
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
-
-// Regex só valida o formato; datas como 31/02 têm o formato certo mas não
-// existem no calendário, e o Postgres rejeitaria isso como erro 500 cru.
-const isCalendarDate = (value: string) => {
-  const parsed = new Date(`${value}T00:00:00Z`)
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
-}
 
 const isoDate = z
   .string({ required_error: 'Informe a data', invalid_type_error: 'Informe a data' })

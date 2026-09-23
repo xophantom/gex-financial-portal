@@ -27,5 +27,13 @@ describe('ClockService', () => {
   it('rejects an APP_TODAY that is not a calendar date', () => {
     expect(() => new ClockService({ APP_TODAY: '18/09/2026' })).toThrow()
     expect(() => new ClockService({ APP_TODAY: '2026-13-01' })).toThrow()
+    expect(() => new ClockService({ APP_TODAY: '2026-02-30' })).toThrow()
+    expect(() => new ClockService({ APP_TODAY: '2026-04-31' })).toThrow()
+    expect(() => new ClockService({ APP_TODAY: '2025-02-29' })).toThrow()
+  })
+
+  it('accepts valid dates including leap days', () => {
+    expect(() => new ClockService({ APP_TODAY: '2024-02-29' })).not.toThrow()
+    expect(() => new ClockService({ APP_TODAY: '2026-09-18' })).not.toThrow()
   })
 })

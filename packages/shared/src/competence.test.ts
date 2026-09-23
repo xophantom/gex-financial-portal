@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatCompetence, parseCompetenceInput } from './competence'
+import { formatCompetence, parseCompetenceInput } from './competence.js'
 
 describe('parseCompetenceInput', () => {
   it('accepts the Brazilian display format', () => {

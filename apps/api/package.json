@@ -69,7 +69,17 @@
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
+      "^.+\\.(t|j)s$": [
+        "ts-jest",
+        {
+          "tsconfig": "tsconfig.test.json"
+        }
+      ]
+    },
+    "moduleNameMapper": {
+      "^@gex/shared$": "<rootDir>/../../../packages/shared/src/index",
+      "^@gex/shared/(.*)": "<rootDir>/../../../packages/shared/src/$1",
+      "(^.*/[^/]+)\\.js$": "$1"
     },
     "collectCoverageFrom": [
       "**/*.(t|j)s"

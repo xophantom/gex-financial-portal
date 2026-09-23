@@ -5,7 +5,7 @@ import {
   allowedActionsFor,
   canTransition,
   nextStatusFor,
-} from './status'
+} from './status.js'
 
 describe('canTransition', () => {
   it.each([

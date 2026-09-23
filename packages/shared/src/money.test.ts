@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { formatCentsToBrl, parseBrlToCents } from './money'
+import { formatCentsToBrl, parseBrlToCents } from './money.js'
 
 const expected = JSON.parse(
   readFileSync(new URL('../../../data/expected_results.json', import.meta.url), 'utf8'),
