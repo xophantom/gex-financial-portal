@@ -3,12 +3,14 @@ import { Injectable } from '@nestjs/common';
 import type {
   CreateRequestInput,
   ListRequestsQuery,
+  RequestStatus,
   UserRole,
 } from '@gex/shared';
 import {
   Prisma,
   RequestCategory as PrismaRequestCategory,
 } from '@prisma/client';
+import { AppException } from '../common/http-exception.filter';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface Viewer {
@@ -155,21 +157,64 @@ export class RequestsRepository {
   // a própria solicitação. Aqui, em vez de devolver uma lista vazia, o
   // método devolve null — é o service quem decide traduzir isso em 404.
   async findOne(id: string, viewer: Viewer) {
-    const row = await this.prisma.request.findFirst({
+    return this.prisma.request.findFirst({
+      // O escopo entra no WHERE, não num if depois da busca: assim o registro
+      // alheio simplesmente não existe para quem consulta, e a rota devolve 404.
       where: {
         id,
         ...(viewer.role === 'REQUESTER' && { requesterId: viewer.id }),
       },
-      include: { requester: { select: { id: true, name: true } } },
+      include: {
+        requester: { select: { id: true, name: true } },
+        events: {
+          orderBy: { createdAt: 'asc' },
+          include: { actor: { select: { id: true, name: true } } },
+        },
+      },
     });
-    if (!row) return null;
+  }
 
-    const events = await this.prisma.requestStatusEvent.findMany({
-      where: { requestId: id },
-      include: { actor: { select: { id: true, name: true } } },
-      orderBy: { createdAt: 'asc' },
+  async transition(
+    id: string,
+    actorId: string,
+    decide: (current: { status: RequestStatus }) => {
+      next: RequestStatus;
+      patch: Prisma.RequestUpdateInput;
+      reason: string | null;
+    },
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      // FOR UPDATE serializa decisões concorrentes sobre a mesma solicitação;
+      // sem ele, duas aprovações simultâneas leem PENDING e gravam dois eventos.
+      const [locked] = await tx.$queryRaw<
+        Array<{ id: string; status: RequestStatus }>
+      >`
+        SELECT id, status FROM requests WHERE id = ${id}::uuid FOR UPDATE
+      `;
+
+      if (!locked)
+        throw new AppException('NOT_FOUND', 'Solicitação não encontrada', 404);
+
+      const { next, patch, reason } = decide(locked);
+
+      const updated = await tx.request.update({
+        where: { id },
+        data: { ...patch, status: next },
+        include: { requester: { select: { id: true, name: true } } },
+      });
+
+      await tx.requestStatusEvent.create({
+        data: {
+          id: randomUUID(),
+          requestId: id,
+          actorId,
+          previousStatus: locked.status,
+          newStatus: next,
+          reason,
+        },
+      });
+
+      return updated;
     });
-
-    return { row, events };
   }
 }

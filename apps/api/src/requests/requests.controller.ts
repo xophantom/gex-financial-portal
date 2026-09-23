@@ -5,14 +5,19 @@ import {
   Headers,
   HttpCode,
   Param,
+  ParseUUIDPipe,
   Post,
   Query,
 } from '@nestjs/common';
 import {
   createRequestSchema,
+  decisionSchema,
   listRequestsQuerySchema,
+  markPaidSchema,
   type CreateRequestInput,
+  type DecisionInput,
   type ListRequestsQuery,
+  type MarkPaidInput,
 } from '@gex/shared';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { Roles } from '../auth/roles.decorator';
@@ -53,13 +58,38 @@ export class RequestsController {
     return this.service.create(input, requester, idempotencyKey);
   }
 
-  // Endpoint mínimo: só o suficiente para a Tarefa 13 provar o evento de
-  // abertura na auditoria (o escopo por papel, e o 404 em vez de 403 para
-  // quem não é dono, já vêm do findOne() do repositório). allowed_actions e
-  // as transições (decision/mark-paid) chegam na Tarefa 14, que volta a
-  // mexer aqui.
   @Get(':id')
-  findOne(@Param('id') id: string, @CurrentUser() viewer: Viewer) {
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() viewer: Viewer,
+  ) {
     return this.service.findOne(id, viewer);
+  }
+
+  // @Roles('FINANCE') aqui e em mark-paid: só financeiro decide sobre uma
+  // solicitação alheia — quem a abriu não pode aprovar, rejeitar ou pagar a
+  // própria nota. @HttpCode(200): sem isto o Nest usa o default de POST
+  // (201 Created), que não faz sentido para uma transição sobre um recurso
+  // que já existe.
+  @Post(':id/decision')
+  @Roles('FINANCE')
+  @HttpCode(200)
+  decide(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(decisionSchema)) input: DecisionInput,
+    @CurrentUser() actor: Viewer,
+  ) {
+    return this.service.decide(id, input, actor);
+  }
+
+  @Post(':id/mark-paid')
+  @Roles('FINANCE')
+  @HttpCode(200)
+  markPaid(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(markPaidSchema)) input: MarkPaidInput,
+    @CurrentUser() actor: Viewer,
+  ) {
+    return this.service.markPaid(id, input, actor);
   }
 }

@@ -1,8 +1,18 @@
 import { Injectable } from '@nestjs/common';
-import type { CreateRequestInput, ListRequestsQuery } from '@gex/shared';
+import {
+  allowedActionsFor,
+  canTransition,
+  nextStatusFor,
+  type CreateRequestInput,
+  type DecisionInput,
+  type ListRequestsQuery,
+  type MarkPaidInput,
+  type RequestStatus,
+} from '@gex/shared';
 import { Prisma } from '@prisma/client';
 import { ClockService } from '../clock/clock.service';
 import { AppException } from '../common/http-exception.filter';
+import { offsetFor } from '../common/timezone';
 import { IdempotencyService } from './idempotency.service';
 import {
   RequestsRepository,
@@ -120,21 +130,103 @@ export class RequestsService {
 
   async findOne(id: string, viewer: Viewer) {
     const found = await this.repository.findOne(id, viewer);
+    // 404 e não 403: 403 confirmaria a existência do registro a quem não pode vê-lo.
     if (!found) {
       throw new AppException('NOT_FOUND', 'Solicitação não encontrada', 404);
     }
 
     return {
-      request: this.toResponse(found.row, this.clock.today()),
+      request: this.toResponse(found, this.clock.today()),
       history: found.events.map((event) => ({
         id: event.id,
         previous_status: event.previousStatus,
         new_status: event.newStatus,
         reason: event.reason,
-        actor: { id: event.actor.id, name: event.actor.name },
         created_at: event.createdAt.toISOString(),
+        actor: { id: event.actor.id, name: event.actor.name },
       })),
+      allowed_actions: allowedActionsFor(found.status, viewer.role),
     };
+  }
+
+  async decide(id: string, input: DecisionInput, actor: Viewer) {
+    const next = nextStatusFor(input.decision);
+
+    const updated = await this.repository.transition(
+      id,
+      actor.id,
+      (current) => {
+        this.assertTransition(current.status, next);
+
+        return {
+          next,
+          patch:
+            input.decision === 'REJECT'
+              ? { rejectionReason: input.reason }
+              : {},
+          reason: input.decision === 'REJECT' ? (input.reason ?? null) : null,
+        };
+      },
+    );
+
+    return this.toResponse(updated, this.clock.today());
+  }
+
+  async markPaid(id: string, input: MarkPaidInput, actor: Viewer) {
+    const paidAt = this.resolvePaidAt(input.paid_at);
+
+    const updated = await this.repository.transition(
+      id,
+      actor.id,
+      (current) => {
+        this.assertTransition(current.status, 'PAID');
+
+        return {
+          next: 'PAID' as const,
+          patch: { paidAt, paymentReference: input.payment_reference },
+          // Os 5 eventos APPROVED→PAID do seed carregam a referência do pagamento
+          // no campo reason; gravar null aqui tornaria o histórico inconsistente.
+          reason: input.payment_reference,
+        };
+      },
+    );
+
+    return this.toResponse(updated, this.clock.today());
+  }
+
+  private assertTransition(from: RequestStatus, to: RequestStatus): void {
+    if (!canTransition(from, to)) {
+      throw new AppException(
+        'INVALID_TRANSITION',
+        `Não é possível mudar de ${from} para ${to}`,
+        409,
+      );
+    }
+  }
+
+  private resolvePaidAt(input: string): Date {
+    const zone = this.clock.timezone();
+    // Meio-dia, não meia-noite: meia-noite fica a poucas horas da fronteira do
+    // dia e qualquer conversão de fuso empurra o pagamento para o dia anterior.
+    const resolved = input.includes('T')
+      ? new Date(input)
+      : new Date(`${input}T12:00:00${offsetFor(input, zone)}`);
+
+    if (resolved.toISOString().slice(0, 10) > this.clock.today()) {
+      throw new AppException(
+        'VALIDATION_ERROR',
+        'A data de pagamento não pode ser futura',
+        422,
+        [
+          {
+            field: 'paid_at',
+            message: 'A data de pagamento não pode ser futura',
+          },
+        ],
+      );
+    }
+
+    return resolved;
   }
 
   private toResponse(row: RequestWithRequester, today: string) {
