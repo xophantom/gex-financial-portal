@@ -1,5 +1,5 @@
-import pino from 'pino'
-import { correlationStore } from './correlation.middleware'
+import pino from 'pino';
+import { correlationStore } from './correlation.middleware';
 
 export const redactionOptions = {
   paths: [
@@ -15,12 +15,14 @@ export const redactionOptions = {
     'refresh_token',
   ],
   censor: '[REDACTED]',
-}
+};
 
 export function buildLogger(): pino.Logger {
   return pino({
     level: process.env.LOG_LEVEL ?? 'info',
     redact: redactionOptions,
-    mixin: () => ({ correlationId: correlationStore.getStore()?.correlationId }),
-  })
+    mixin: () => ({
+      correlationId: correlationStore.getStore()?.correlationId,
+    }),
+  });
 }

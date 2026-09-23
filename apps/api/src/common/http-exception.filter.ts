@@ -1,6 +1,12 @@
-import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus } from '@nestjs/common'
-import type { ErrorCode, ErrorDetail } from '@gex/shared'
-import { ZodError } from 'zod'
+import {
+  ArgumentsHost,
+  Catch,
+  ExceptionFilter,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
+import type { ErrorCode, ErrorDetail } from '@gex/shared';
+import { ZodError } from 'zod';
 
 export class AppException extends Error {
   constructor(
@@ -9,7 +15,7 @@ export class AppException extends Error {
     readonly status: number,
     readonly details?: ErrorDetail[],
   ) {
-    super(message)
+    super(message);
   }
 }
 
@@ -20,18 +26,22 @@ const STATUS_TO_CODE: Record<number, ErrorCode> = {
   [HttpStatus.CONFLICT]: 'DUPLICATE_INVOICE',
   [HttpStatus.TOO_MANY_REQUESTS]: 'TOO_MANY_REQUESTS',
   [HttpStatus.UNPROCESSABLE_ENTITY]: 'VALIDATION_ERROR',
-}
+};
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
-    const response = host.switchToHttp().getResponse()
+    const response = host.switchToHttp().getResponse();
 
     if (exception instanceof AppException) {
       response.status(exception.status).json({
-        error: { code: exception.code, message: exception.message, ...(exception.details && { details: exception.details }) },
-      })
-      return
+        error: {
+          code: exception.code,
+          message: exception.message,
+          ...(exception.details && { details: exception.details }),
+        },
+      });
+      return;
     }
 
     if (exception instanceof ZodError) {
@@ -44,22 +54,25 @@ export class HttpExceptionFilter implements ExceptionFilter {
             message: issue.message,
           })),
         },
-      })
-      return
+      });
+      return;
     }
 
     if (exception instanceof HttpException) {
-      const status = exception.getStatus()
+      const status = exception.getStatus();
       response.status(status).json({
-        error: { code: STATUS_TO_CODE[status] ?? 'INTERNAL_ERROR', message: exception.message },
-      })
-      return
+        error: {
+          code: STATUS_TO_CODE[status] ?? 'INTERNAL_ERROR',
+          message: exception.message,
+        },
+      });
+      return;
     }
 
     // A mensagem original pode conter connection string ou segredo; o detalhe
     // vai para o log estruturado, nunca para a resposta.
     response.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       error: { code: 'INTERNAL_ERROR', message: 'Erro interno' },
-    })
+    });
   }
 }

@@ -1,4 +1,4 @@
-import { redactionOptions } from './logger'
+import { redactionOptions } from './logger';
 
 describe('log redaction', () => {
   it('redacts every credential-bearing path', () => {
@@ -12,10 +12,10 @@ describe('log redaction', () => {
         'token',
         'refresh_token',
       ]),
-    )
-  })
+    );
+  });
 
   it('censors rather than removes, so the shape of the log stays stable', () => {
-    expect(redactionOptions.censor).toBe('[REDACTED]')
-  })
-})
+    expect(redactionOptions.censor).toBe('[REDACTED]');
+  });
+});
