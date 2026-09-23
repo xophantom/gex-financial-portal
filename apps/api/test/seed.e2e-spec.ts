@@ -172,6 +172,12 @@ describe('seed', () => {
       expect(await argon2.verify(stored.passwordHash, user.seed_password)).toBe(
         true,
       );
+      // argon2.verify() detecta a variante (argon2i/argon2id/argon2d) a
+      // partir do próprio hash — trocar prisma/seed.ts para um argon2.hash()
+      // sem `type` (que usa argon2i por padrão) passaria pelo assert acima
+      // sem que nada aqui notasse. Fixar o prefixo é o que realmente prende
+      // argon2id como a variante exigida pelo projeto.
+      expect(stored.passwordHash.startsWith('$argon2id$')).toBe(true);
     }
   });
 

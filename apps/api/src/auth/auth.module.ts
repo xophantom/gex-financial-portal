@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { AuthController } from './auth.controller';
@@ -22,7 +23,19 @@ import { RolesGuard } from './roles.guard';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, JwtGuard, RolesGuard],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    JwtGuard,
+    RolesGuard,
+    // Default-nega em vez de opt-in por controller: sem isto, proteção só
+    // existe onde alguém lembrou de escrever @UseGuards, e o próximo
+    // controller que esquecer fica público sem que nenhum teste ou lint
+    // pegue isso. A ordem importa — autenticação (JwtGuard) antes de
+    // autorização (RolesGuard).
+    { provide: APP_GUARD, useClass: JwtGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
+  ],
   exports: [AuthService, JwtGuard, RolesGuard],
 })
 export class AuthModule {}

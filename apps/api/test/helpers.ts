@@ -66,9 +66,16 @@ export async function createTestApp(): Promise<TestApp> {
     server,
 
     async close() {
-      await app.close();
-      await stopTestRedis();
-      await stopTestDatabase();
+      // Sem o finally, um app.close() que lança (ou trava) deixa os dois
+      // containers descartáveis para trás — testcontainers só os derruba de
+      // verdade com o reaper, não instantaneamente, então isso pode
+      // sobreviver ao processo de teste. allSettled garante que a falha de
+      // um stop não impede a tentativa do outro.
+      try {
+        await app.close();
+      } finally {
+        await Promise.allSettled([stopTestRedis(), stopTestDatabase()]);
+      }
     },
 
     async tokenFor(email: string, password: string): Promise<string> {

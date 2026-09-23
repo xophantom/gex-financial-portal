@@ -22,6 +22,11 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       secretOrKey: resolveJwtSecret(),
+      // Hoje só é seguro por acidente: um secretOrKey do tipo string faz o
+      // jsonwebtoken inferir só algoritmos HS*. Declarar explicitamente
+      // impede essa proteção implícita de regredir silenciosamente se o
+      // secret um dia virar um objeto/chave assimétrica.
+      algorithms: ['HS256'],
     });
   }
 
