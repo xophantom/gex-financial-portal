@@ -1,0 +1,84 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+enum UserRole {
+  REQUESTER
+  FINANCE
+}
+
+enum RequestCategory {
+  SOFTWARE
+  SERVICOS       @map("SERVIÇOS")
+  MARKETING
+  INFRAESTRUTURA
+}
+
+model User {
+  id           String   @id @db.Uuid
+  name         String
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         UserRole
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  requests Request[]
+  actions  RequestStatusEvent[]
+
+  @@map("users")
+}
+
+model Request {
+  id               String          @id @db.Uuid
+  requesterId      String          @map("requester_id") @db.Uuid
+  supplierName     String          @map("supplier_name")
+  supplierCnpj     String          @map("supplier_cnpj") @db.Char(14)
+  invoiceNumber    String          @map("invoice_number")
+  amountCents      BigInt          @map("amount_cents")
+  competence       String          @db.Char(7)
+  dueDate          DateTime        @map("due_date") @db.Date
+  category         RequestCategory
+  description      String?
+  status           RequestStatus   @default(PENDING)
+  rejectionReason  String?         @map("rejection_reason")
+  paidAt           DateTime?       @map("paid_at") @db.Timestamptz(3)
+  paymentReference String?         @map("payment_reference")
+  createdAt        DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  requester User                 @relation(fields: [requesterId], references: [id])
+  events    RequestStatusEvent[]
+
+  @@unique([supplierCnpj, invoiceNumber], map: "requests_cnpj_invoice_unique")
+  @@index([status, dueDate])
+  @@index([requesterId, createdAt(sort: Desc)])
+  @@map("requests")
+}
+
+model RequestStatusEvent {
+  id             String         @id @db.Uuid
+  requestId      String         @map("request_id") @db.Uuid
+  actorId        String         @map("actor_id") @db.Uuid
+  previousStatus RequestStatus? @map("previous_status")
+  newStatus      RequestStatus  @map("new_status")
+  reason         String?
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  request Request @relation(fields: [requestId], references: [id])
+  actor   User    @relation(fields: [actorId], references: [id])
+
+  @@index([requestId, createdAt])
+  @@map("request_status_events")
+}
