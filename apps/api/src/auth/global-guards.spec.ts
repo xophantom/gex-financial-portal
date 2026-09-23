@@ -47,7 +47,7 @@ describe('global guards (default deny)', () => {
       .overrideProvider(PrismaService)
       .useValue({ user: { findUnique: () => null } })
       .overrideProvider(RedisService)
-      .useValue({ incrWithTtl: () => 1, del: () => undefined })
+      .useValue({ incrWithTtl: () => 1, delKey: () => undefined })
       .compile();
 
     const app = moduleRef.createNestApplication();
@@ -68,7 +68,7 @@ describe('global guards (default deny)', () => {
       .overrideProvider(PrismaService)
       .useValue({ user: { findUnique: () => null } })
       .overrideProvider(RedisService)
-      .useValue({ incrWithTtl: () => 1, del: () => undefined })
+      .useValue({ incrWithTtl: () => 1, delKey: () => undefined })
       .compile();
 
     const app = moduleRef.createNestApplication();

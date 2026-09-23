@@ -28,18 +28,28 @@ const jwt = { signAsync: jest.fn(async () => 'token'), verifyAsync: jest.fn() };
 // incrWithTtl acumule por chave e que del zere — sem isso não haveria como
 // provar "nove falhas, um sucesso, nove falhas de novo, todas alcançáveis"
 // nem "trinta e-mails diferentes do mesmo IP acabam em 429".
+// delKey aqui é um Map.delete exato — o mesmo contrato do delKey real
+// (client.del(key) direto). Isto já era verdade sem querer antes (quando o
+// call site chamava `del`, mas o real `del` era por glob via KEYS): o fake
+// não refletia o real, e esse desalinhamento escondeu o bug do KEYS. Agora
+// que o call site usa delKey de verdade, os dois lados usam a mesma
+// semântica de chave exata — não há mais o que divergir.
 /* eslint-disable @typescript-eslint/require-await -- assíncronas para que o
    valor de retorno continue compatível com mockResolvedValueOnce, usado
    abaixo por um teste já existente. */
 function createFakeRedis() {
   const counts = new Map<string, number>();
   return {
-    incrWithTtl: jest.fn(async (key: string) => {
+    // Precisa aceitar o segundo argumento (ttlSeconds) para bater com a
+    // assinatura real de incrWithTtl(key, ttlSeconds); o fake não expira nada
+    // de verdade, daí o eslint-disable na própria linha.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    incrWithTtl: jest.fn(async (key: string, ttlSeconds: number) => {
       const next = (counts.get(key) ?? 0) + 1;
       counts.set(key, next);
       return next;
     }),
-    del: jest.fn(async (key: string) => {
+    delKey: jest.fn(async (key: string) => {
       counts.delete(key);
     }),
   };
@@ -225,5 +235,50 @@ describe('AuthService rate limiting', () => {
     await expect(
       svc.login('one-more@gex.test', 'wrong', IP),
     ).rejects.toMatchObject({ status: 429 });
+  });
+
+  // Fix round 3: o contador por IP só devia contar FALHA. Antes, um sucesso
+  // também incrementava — um escritório inteiro atrás do mesmo NAT batendo
+  // 30 logins bem-sucedidos numa manhã comum se autobaniria sem que ninguém
+  // tivesse digitado uma senha errada.
+  it('does not count a successful login against the per-IP limit', async () => {
+    for (let i = 0; i < MAX_ATTEMPTS_PER_IP - 1; i++) {
+      await expect(
+        build(null).login(`nobody-${i}@gex.test`, 'wrong', IP),
+      ).rejects.toMatchObject({ status: 401 });
+    }
+
+    // Sucesso: não deve tocar o contador por IP.
+    await build(user).login('solicitante@gex.test', 'GexRequester123!', IP);
+
+    // Se o sucesso acima tivesse incrementado o contador, esta seria a
+    // tentativa 31 e devolveria 429 em vez de 401.
+    await expect(
+      build(user).login('solicitante@gex.test', 'wrong', IP),
+    ).rejects.toMatchObject({ status: 401 });
+  });
+
+  // Fix round 3: del(pattern) via KEYS apagaria qualquer chave que desse
+  // match no padrão, não só a do e-mail que logou — um delete por glob
+  // barato de escrever e caro de descobrir em produção. delKey(key) só pode
+  // afetar a própria chave; este teste é exatamente o que pegaria uma
+  // regressão de volta para um delete por padrão.
+  it('deletes only its own key on success, leaving unrelated rate-limit keys untouched', async () => {
+    // Popula a chave alheia antes: login() vai incrementar e depois apagar a
+    // sua própria chave (login:email:solicitante@gex.test) como parte do
+    // próprio fluxo — o que importa aqui é o que sobra da OUTRA.
+    await redis.incrWithTtl('login:email:outro.solicitante@gex.test', 300);
+
+    await build(user).login('solicitante@gex.test', 'GexRequester123!', IP);
+
+    // A própria chave foi apagada: o próximo incremento reinicia do zero.
+    expect(
+      await redis.incrWithTtl('login:email:solicitante@gex.test', 300),
+    ).toBe(1);
+    // A chave alheia sobreviveu: continua de onde estava (1 -> 2), não
+    // reiniciou (o que aconteceria se ela tivesse sido apagada também).
+    expect(
+      await redis.incrWithTtl('login:email:outro.solicitante@gex.test', 300),
+    ).toBe(2);
   });
 });

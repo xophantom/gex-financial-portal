@@ -56,15 +56,12 @@ export class AuthService {
     const emailKey = `login:email:${email.toLowerCase()}`;
     const ipKey = `login:ip:${ip}`;
 
-    const [emailAttempts, ipAttempts] = await Promise.all([
-      this.redis.incrWithTtl(emailKey, EMAIL_WINDOW_SECONDS),
-      this.redis.incrWithTtl(ipKey, IP_WINDOW_SECONDS),
-    ]);
+    const emailAttempts = await this.redis.incrWithTtl(
+      emailKey,
+      EMAIL_WINDOW_SECONDS,
+    );
 
-    if (
-      emailAttempts > MAX_ATTEMPTS_PER_EMAIL ||
-      ipAttempts > MAX_ATTEMPTS_PER_IP
-    ) {
+    if (emailAttempts > MAX_ATTEMPTS_PER_EMAIL) {
       throw new AppException(
         'TOO_MANY_REQUESTS',
         'Muitas tentativas. Tente novamente em instantes.',
@@ -85,6 +82,21 @@ export class AuthService {
     // Mesma mensagem e mesmo status para e-mail inexistente e senha errada:
     // distinguir os dois transforma a tela de login em verificador de contas.
     if (!user || !valid) {
+      // O contador por IP só conta FALHA, e é incrementado só aqui: um
+      // escritório inteiro atrás do mesmo NAT fazendo login de manhã não
+      // deve se autobanir por logins que deram certo. Um atacante testando
+      // muitas contas continua gerando falha atrás de falha e ainda esbarra
+      // no limite — o que muda é que sucesso nunca conta contra ninguém.
+      const ipAttempts = await this.redis.incrWithTtl(ipKey, IP_WINDOW_SECONDS);
+
+      if (ipAttempts > MAX_ATTEMPTS_PER_IP) {
+        throw new AppException(
+          'TOO_MANY_REQUESTS',
+          'Muitas tentativas. Tente novamente em instantes.',
+          429,
+        );
+      }
+
       throw new AppException(
         'UNAUTHENTICATED',
         'E-mail ou senha inválidos',
@@ -92,12 +104,16 @@ export class AuthService {
       );
     }
 
-    // Só a chave por e-mail é resetada: um login legítimo não deve custar
+    // Só a chave por e-mail é apagada: um login legítimo não deve custar
     // tentativas futuras deste usuário, mas resetar o contador por IP a cada
     // sucesso abriria uma brecha — um atacante fazendo credential stuffing
     // contra várias contas poderia logar de vez em quando na própria conta
-    // só para zerar o limite compartilhado e continuar testando as outras.
-    await this.redis.del(emailKey);
+    // só para zerar o limite compartilhado e continuar testando as outras
+    // (e agora nem precisaria: sucesso já não incrementa o contador por IP).
+    // delKey, não del: a chave é conhecida e exata, não um padrão — del(...)
+    // varre o keyspace inteiro com SCAN, trabalho desnecessário aqui e o
+    // motivo original deste bug (ele usava KEYS, que bloqueia o Redis).
+    await this.redis.delKey(emailKey);
 
     return this.issue(user);
   }

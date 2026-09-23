@@ -19,9 +19,33 @@ export class RedisService implements OnModuleDestroy {
     return this.client.get(key);
   }
 
+  // Chave exata, não glob: usa DEL diretamente, sem nunca varrer o keyspace.
+  // É isto que qualquer call site que sabe exatamente qual chave apagar deve
+  // chamar — nunca `del(pattern)` abaixo para esse caso.
+  async delKey(key: string): Promise<void> {
+    await this.client.del(key);
+  }
+
+  // Apagar por padrão ainda pode ser genuinamente necessário (ex.: invalidar
+  // todas as chaves de idempotência de uma entidade, ou um cache por
+  // prefixo) — mas KEYS varre o keyspace inteiro e BLOQUEIA o Redis (que é
+  // single-threaded) até terminar, o que é inaceitável em qualquer caminho
+  // que rode em produção com outras chaves no mesmo banco. SCAN faz o mesmo
+  // trabalho em lotes, com cursor, sem bloquear.
   async del(pattern: string): Promise<void> {
-    const keys = await this.client.keys(pattern);
-    if (keys.length > 0) await this.client.del(...keys);
+    let cursor = '0';
+
+    do {
+      const [nextCursor, keys] = await this.client.scan(
+        cursor,
+        'MATCH',
+        pattern,
+        'COUNT',
+        100,
+      );
+      if (keys.length > 0) await this.client.del(...keys);
+      cursor = nextCursor;
+    } while (cursor !== '0');
   }
 
   async incrWithTtl(key: string, ttlSeconds: number): Promise<number> {
