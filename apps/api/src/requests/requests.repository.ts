@@ -1,11 +1,61 @@
+import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
-import type { ListRequestsQuery, UserRole } from '@gex/shared';
-import { Prisma } from '@prisma/client';
+import type {
+  CreateRequestInput,
+  ListRequestsQuery,
+  UserRole,
+} from '@gex/shared';
+import {
+  Prisma,
+  RequestCategory as PrismaRequestCategory,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface Viewer {
   id: string;
   role: UserRole;
+}
+
+type RequestCategoryLabel = CreateRequestInput['category'];
+
+// Direção oposta à do seed (prisma/seed.ts): lá o rótulo com acento vira a
+// chave do enum do Prisma antes de gravar; aqui a chave que o client sempre
+// devolve (SERVICOS) volta a virar o rótulo com acento (SERVIÇOS) que o
+// resto do domínio usa — o client expõe o nome declarado no schema, nunca o
+// valor mapeado para o banco via @map.
+const CATEGORY_LABEL = new Map<PrismaRequestCategory, RequestCategoryLabel>([
+  ['SOFTWARE', 'SOFTWARE'],
+  ['SERVICOS', 'SERVIÇOS'],
+  ['MARKETING', 'MARKETING'],
+  ['INFRAESTRUTURA', 'INFRAESTRUTURA'],
+]);
+
+// Mesmo mapa, sentido inverso: ao criar, o schema Zod entrega o rótulo
+// acentuado (é o que o resto do domínio usa) mas o Prisma Client só aceita a
+// chave do enum. Derivar do mesmo Map, em vez de declarar uma segunda lista
+// solta, é o que impede as duas direções de um dia divergirem.
+const CATEGORY_KEY = new Map<RequestCategoryLabel, PrismaRequestCategory>(
+  Array.from(CATEGORY_LABEL, ([key, label]) => [label, key]),
+);
+
+export function toCategoryLabel(
+  category: PrismaRequestCategory,
+): RequestCategoryLabel {
+  const label = CATEGORY_LABEL.get(category);
+  if (!label) {
+    throw new Error(`unknown Prisma request category: ${category}`);
+  }
+  return label;
+}
+
+export function toCategoryKey(
+  label: RequestCategoryLabel,
+): PrismaRequestCategory {
+  const key = CATEGORY_KEY.get(label);
+  if (!key) {
+    throw new Error(`unknown request category label: ${label}`);
+  }
+  return key;
 }
 
 // % e _ são curingas de LIKE: sem escape, buscar "100%" casa com tudo.
@@ -61,5 +111,65 @@ export class RequestsRepository {
     ]);
 
     return { data, total };
+  }
+
+  async create(input: CreateRequestInput, requesterId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const created = await tx.request.create({
+        data: {
+          id: randomUUID(),
+          requesterId,
+          supplierName: input.supplier_name,
+          supplierCnpj: input.supplier_cnpj,
+          invoiceNumber: input.invoice_number,
+          amountCents: BigInt(input.amount_cents),
+          competence: input.competence,
+          dueDate: new Date(`${input.due_date}T00:00:00Z`),
+          category: toCategoryKey(input.category),
+          description: input.description ?? null,
+          status: 'PENDING',
+        },
+        include: { requester: { select: { id: true, name: true } } },
+      });
+
+      // Auditoria no mesmo commit da criação: uma solicitação sem evento de
+      // abertura violaria "cada transição gera um registro". Se o P2002 do
+      // create acima disparar, esta chamada nunca acontece — não sobra
+      // evento de abertura órfão para uma linha que não existe.
+      await tx.requestStatusEvent.create({
+        data: {
+          id: randomUUID(),
+          requestId: created.id,
+          actorId: requesterId,
+          previousStatus: null,
+          newStatus: 'PENDING',
+          reason: null,
+        },
+      });
+
+      return created;
+    });
+  }
+
+  // Escopo por papel replicado do where() de list(): um REQUESTER só enxerga
+  // a própria solicitação. Aqui, em vez de devolver uma lista vazia, o
+  // método devolve null — é o service quem decide traduzir isso em 404.
+  async findOne(id: string, viewer: Viewer) {
+    const row = await this.prisma.request.findFirst({
+      where: {
+        id,
+        ...(viewer.role === 'REQUESTER' && { requesterId: viewer.id }),
+      },
+      include: { requester: { select: { id: true, name: true } } },
+    });
+    if (!row) return null;
+
+    const events = await this.prisma.requestStatusEvent.findMany({
+      where: { requestId: id },
+      include: { actor: { select: { id: true, name: true } } },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return { row, events };
   }
 }

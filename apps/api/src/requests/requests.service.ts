@@ -1,45 +1,25 @@
 import { Injectable } from '@nestjs/common';
-import { REQUEST_CATEGORIES, type ListRequestsQuery } from '@gex/shared';
-import {
-  Prisma,
-  RequestCategory as PrismaRequestCategory,
-} from '@prisma/client';
+import type { CreateRequestInput, ListRequestsQuery } from '@gex/shared';
+import { Prisma } from '@prisma/client';
 import { ClockService } from '../clock/clock.service';
-import { RequestsRepository, Viewer } from './requests.repository';
+import { AppException } from '../common/http-exception.filter';
+import { IdempotencyService } from './idempotency.service';
+import {
+  RequestsRepository,
+  Viewer,
+  toCategoryLabel,
+} from './requests.repository';
 
 type RequestWithRequester = Prisma.RequestGetPayload<{
   include: { requester: { select: { id: true; name: true } } };
 }>;
-
-type RequestCategoryLabel = (typeof REQUEST_CATEGORIES)[number];
-
-// Direção oposta à do seed (prisma/seed.ts): lá o rótulo com acento vira a
-// chave do enum do Prisma antes de gravar; aqui a chave que o client sempre
-// devolve (SERVICOS) volta a virar o rótulo com acento (SERVIÇOS) que o
-// resto do domínio usa — o client expõe o nome declarado no schema, nunca o
-// valor mapeado para o banco via @map.
-const CATEGORY_LABEL = new Map<PrismaRequestCategory, RequestCategoryLabel>([
-  ['SOFTWARE', 'SOFTWARE'],
-  ['SERVICOS', 'SERVIÇOS'],
-  ['MARKETING', 'MARKETING'],
-  ['INFRAESTRUTURA', 'INFRAESTRUTURA'],
-]);
-
-function toCategoryLabel(
-  category: PrismaRequestCategory,
-): RequestCategoryLabel {
-  const label = CATEGORY_LABEL.get(category);
-  if (!label) {
-    throw new Error(`unknown Prisma request category: ${category}`);
-  }
-  return label;
-}
 
 @Injectable()
 export class RequestsService {
   constructor(
     private readonly repository: RequestsRepository,
     private readonly clock: ClockService,
+    private readonly idempotency: IdempotencyService,
   ) {}
 
   async list(query: ListRequestsQuery, viewer: Viewer) {
@@ -52,6 +32,65 @@ export class RequestsService {
       page_size: query.page_size,
       total,
       total_pages: Math.max(1, Math.ceil(total / query.page_size)),
+    };
+  }
+
+  async create(
+    input: CreateRequestInput,
+    requester: Viewer,
+    idempotencyKey?: string,
+  ) {
+    if (idempotencyKey) {
+      const replayed = await this.idempotency.recall(idempotencyKey);
+      if (replayed) return replayed;
+    }
+
+    const created = await this.repository
+      .create(input, requester.id)
+      .catch((error: unknown) => {
+        // P2002 é violação de restrição única; a única que existe nesta
+        // tabela é (supplier_cnpj, invoice_number), e é o banco arbitrando a
+        // corrida entre criações concorrentes, não uma checagem prévia da
+        // aplicação (que teria uma janela de corrida entre o SELECT e o
+        // INSERT). PrismaClientKnownRequestError vem de @prisma/client, que
+        // apps/api importa direto (não de @gex/shared, que é ESM) — então,
+        // ao contrário de ZodError, instanceof é seguro aqui.
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2002'
+        ) {
+          throw new AppException(
+            'DUPLICATE_INVOICE',
+            'Já existe uma solicitação com este CNPJ e número de nota',
+            409,
+          );
+        }
+        throw error;
+      });
+
+    const response = this.toResponse(created, this.clock.today());
+    if (idempotencyKey)
+      await this.idempotency.remember(idempotencyKey, response);
+
+    return response;
+  }
+
+  async findOne(id: string, viewer: Viewer) {
+    const found = await this.repository.findOne(id, viewer);
+    if (!found) {
+      throw new AppException('NOT_FOUND', 'Solicitação não encontrada', 404);
+    }
+
+    return {
+      request: this.toResponse(found.row, this.clock.today()),
+      history: found.events.map((event) => ({
+        id: event.id,
+        previous_status: event.previousStatus,
+        new_status: event.newStatus,
+        reason: event.reason,
+        actor: { id: event.actor.id, name: event.actor.name },
+        created_at: event.createdAt.toISOString(),
+      })),
     };
   }
 
