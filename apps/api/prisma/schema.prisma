@@ -64,6 +64,7 @@ model Request {
   @@unique([supplierCnpj, invoiceNumber], map: "requests_cnpj_invoice_unique")
   @@index([status, dueDate])
   @@index([requesterId, createdAt(sort: Desc)])
+  @@index([supplierName(ops: raw("gin_trgm_ops"))], type: Gin, map: "requests_supplier_name_trgm_idx")
   @@map("requests")
 }
 

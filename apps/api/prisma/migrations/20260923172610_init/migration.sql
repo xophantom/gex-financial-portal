@@ -90,6 +90,9 @@ ALTER TABLE "requests"
     CHECK ("status" <> 'PAID'
            OR ("paid_at" IS NOT NULL AND "payment_reference" IS NOT NULL));
 
+-- Índice parcial: o Prisma DSL não expressa cláusula WHERE em índice, então
+-- este fica em SQL puro por necessidade, não por esquecimento — não apague
+-- achando que é sobra de outra migration.
 CREATE INDEX "requests_paid_at_idx" ON "requests" ("paid_at") WHERE "status" = 'PAID';
 
 CREATE INDEX "requests_supplier_name_trgm_idx"

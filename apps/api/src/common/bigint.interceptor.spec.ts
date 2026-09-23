@@ -31,6 +31,25 @@ describe('BigIntInterceptor', () => {
     await expect(run({ amount_cents: 2n ** 60n })).rejects.toThrow(/safe integer/i)
   })
 
+  it('throws when a BigInt is below the negative safe integer range', async () => {
+    await expect(run({ amount_cents: -(2n ** 60n) })).rejects.toThrow(/safe integer/i)
+  })
+
+  it('converts boundary-safe BigInt values instead of throwing', async () => {
+    await expect(run({ a: 0n, b: -1n, c: 9007199254740991n })).resolves.toEqual({
+      a: 0,
+      b: -1,
+      c: 9007199254740991,
+    })
+  })
+
+  it('converts BigInt in a bare top-level array response', async () => {
+    await expect(run([{ amount_cents: 1n }, { amount_cents: 2n }])).resolves.toEqual([
+      { amount_cents: 1 },
+      { amount_cents: 2 },
+    ])
+  })
+
   it('leaves Date, null and undefined untouched', async () => {
     const date = new Date('2026-09-18T14:00:00-03:00')
     await expect(run({ paid_at: date, a: null, b: undefined })).resolves.toEqual({
