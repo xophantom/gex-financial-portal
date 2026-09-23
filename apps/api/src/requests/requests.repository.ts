@@ -47,7 +47,13 @@ export class RequestsRepository {
       this.prisma.request.findMany({
         where,
         include: { requester: { select: { id: true, name: true } } },
-        orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }],
+        // id como desempate final: dueDate e createdAt não são únicos — duas
+        // linhas com o mesmo vencimento criadas no mesmo milissegundo empatam
+        // nas duas, e sem uma terceira chave que seja de fato única, Postgres
+        // não garante a mesma ordem de empate entre duas consultas
+        // skip/take separadas. Uma escrita concorrente entre a página N e a
+        // N+1 pode então fazer uma linha aparecer duas vezes ou nenhuma.
+        orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }, { id: 'asc' }],
         skip: (query.page - 1) * query.page_size,
         take: query.page_size,
       }),

@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { PrismaClient } from '@prisma/client';
 import request from 'supertest';
 import { createTestApp, TestApp } from './helpers';
 
@@ -11,6 +14,8 @@ interface RequesterInfo {
 }
 
 interface RequestListItem {
+  id: string;
+  invoice_number: string;
   status: string;
   supplier_name: string;
   due_date: string;
@@ -34,6 +39,21 @@ interface ErrorBody {
     details?: { field: string; message: string }[];
   };
 }
+
+interface SeedRequestFixtureRow {
+  invoice_number: string;
+  due_date: string;
+  status: string;
+}
+
+// Lido do fixture cru, não do banco: compara a saída da API contra a fonte
+// da verdade dos dados de seed, não contra o que o próprio seed.ts gravou —
+// se o seed corrompesse due_date ou status ao gravar, este teste ainda pegaria
+// a divergência entre a API e o fixture original.
+const readSeedRequests = (): SeedRequestFixtureRow[] =>
+  JSON.parse(
+    readFileSync(join(__dirname, '../../../data/seed_requests.json'), 'utf8'),
+  ) as SeedRequestFixtureRow[];
 
 beforeAll(async () => {
   app = await createTestApp();
@@ -169,12 +189,31 @@ describe('GET /requests filters', () => {
     expect(body.error.details?.[0].message).toMatch(/posterior/i);
   });
 
-  it('marks overdue rows against APP_TODAY, not the wall clock', async () => {
+  it('marks exactly the overdue rows against APP_TODAY, not the wall clock', async () => {
     const response = await list(finance, '?page_size=100').expect(200);
     const body = response.body as RequestListBody;
-    const overdue = body.data.filter((row) => row.is_overdue);
 
-    expect(overdue).toHaveLength(4);
+    // Deriva o conjunto esperado do fixture cru, reaplicando a regra do
+    // domínio (não chamando o código sob teste): um total de 4 aqui não
+    // prova nada sobre QUAIS 4 — um off-by-one na fronteira da data, ou
+    // comparar contra created_at em vez de due_date, ainda produziria 4
+    // linhas, só que as erradas, e o teste antigo (toHaveLength(4)) passaria
+    // do mesmo jeito.
+    const expectedOverdueInvoiceNumbers = readSeedRequests()
+      .filter(
+        (row) =>
+          (row.status === 'PENDING' || row.status === 'APPROVED') &&
+          row.due_date < '2026-09-18',
+      )
+      .map((row) => row.invoice_number)
+      .sort();
+
+    const actualOverdueInvoiceNumbers = body.data
+      .filter((row) => row.is_overdue)
+      .map((row) => row.invoice_number)
+      .sort();
+
+    expect(actualOverdueInvoiceNumbers).toEqual(expectedOverdueInvoiceNumbers);
   });
 
   it('does not mark a request due exactly on APP_TODAY as overdue', async () => {
@@ -185,5 +224,95 @@ describe('GET /requests filters', () => {
     const body = response.body as RequestListBody;
 
     expect(body.data.every((row) => !row.is_overdue)).toBe(true);
+  });
+});
+
+// Colocado por último de propósito: insere linhas extras na mesma tabela que
+// as suítes acima já contaram (16 no total, 5 PENDING etc.). Rodando depois
+// que essas asserções de total já passaram, esta suíte não perturba nenhuma
+// delas — e o afterAll() apaga as linhas antes do app.close() do arquivo.
+describe('GET /requests pagination has a total order', () => {
+  const COLLISION_SUPPLIER = 'Colisao Ordenacao E2E';
+  const COLLISION_COUNT = 10;
+  const PAGE_SIZE = 3;
+  const collisionIds = Array.from(
+    { length: COLLISION_COUNT },
+    (_, index) => `99999999-0000-4000-8000-${String(index).padStart(12, '0')}`,
+  );
+
+  let prisma: PrismaClient;
+
+  beforeAll(async () => {
+    // process.env.DATABASE_URL já foi setado por createTestApp() (chamado no
+    // beforeAll do topo do arquivo, que roda antes de qualquer describe
+    // filho) — um client Prisma próprio, fora do pool da aplicação, deixa
+    // este teste simular escritas concorrentes sem precisar de nenhuma rota
+    // de escrita (a Tarefa 12 só implementa leitura).
+    prisma = new PrismaClient();
+
+    // Mesmo due_date e mesmo created_at para todas: sem um desempate único
+    // no ORDER BY, essas linhas empatam nas duas colunas usadas hoje.
+    const dueDate = new Date('2099-01-01T00:00:00Z');
+    const createdAt = new Date('2099-01-01T00:00:00.000Z');
+
+    for (const [index, id] of collisionIds.entries()) {
+      await prisma.request.create({
+        data: {
+          id,
+          requesterId: '10000000-0000-4000-8000-000000000001',
+          supplierName: COLLISION_SUPPLIER,
+          supplierCnpj: `9999999900${String(index).padStart(4, '0')}`,
+          invoiceNumber: `COLISAO-${index}`,
+          amountCents: 1000n,
+          competence: '2099-01',
+          dueDate,
+          category: 'SOFTWARE',
+          status: 'PENDING',
+          createdAt,
+          updatedAt: createdAt,
+        },
+      });
+    }
+  });
+
+  afterAll(async () => {
+    await prisma.request.deleteMany({
+      where: { supplierName: COLLISION_SUPPLIER },
+    });
+    await prisma.$disconnect();
+  });
+
+  // Duas consultas skip/take separadas e sem alteração nenhuma na tabela
+  // entre elas tendem a devolver a mesma ordem de empate por acidente (mesmo
+  // plano, mesmo layout físico) — o que mascararia o bug num teste ingênuo.
+  // O que de fato muda a ordem de empate em produção é uma escrita
+  // concorrente entre a página N e a N+1; touch() reproduz exatamente isso,
+  // criando uma nova versão de tupla para cada linha empatada.
+  const touchAllCollisionRows = async () => {
+    for (const id of [...collisionIds].reverse()) {
+      await prisma.request.update({
+        where: { id },
+        data: { description: `touched-${Date.now()}-${Math.random()}` },
+      });
+    }
+  };
+
+  it('returns every row exactly once across pages despite concurrent writes', async () => {
+    const seenIds: string[] = [];
+    const pageCount = Math.ceil(COLLISION_COUNT / PAGE_SIZE);
+
+    for (let page = 1; page <= pageCount; page += 1) {
+      const response = await list(
+        finance,
+        `?supplier=${encodeURIComponent(COLLISION_SUPPLIER)}&page=${page}&page_size=${PAGE_SIZE}`,
+      ).expect(200);
+      const body = response.body as RequestListBody;
+
+      seenIds.push(...body.data.map((row) => row.id));
+      await touchAllCollisionRows();
+    }
+
+    expect(new Set(seenIds).size).toBe(seenIds.length);
+    expect([...seenIds].sort()).toEqual([...collisionIds].sort());
   });
 });
