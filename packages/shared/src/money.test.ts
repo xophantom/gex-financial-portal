@@ -33,6 +33,11 @@ describe('parseBrlToCents', () => {
     expect(parseBrlToCents('0,07')).toBe(7)
     expect(parseBrlToCents('1234567,89')).toBe(123456789)
   })
+
+  it('distinguishes magnitude overflow from zero/negative values', () => {
+    const error = expect(() => parseBrlToCents('90071992547409929,00')).toThrow()
+    error.toHaveProperty('message', expect.stringContaining('limite suportado'))
+  })
 })
 
 describe('formatCentsToBrl', () => {
@@ -49,5 +54,17 @@ describe('formatCentsToBrl', () => {
     for (const cents of [1, 7, 1000, 155313, 123456789]) {
       expect(parseBrlToCents(formatCentsToBrl(cents))).toBe(cents)
     }
+  })
+
+  it('rejects non-safe integers', () => {
+    expect(() => formatCentsToBrl(100.5)).toThrow()
+    expect(() => formatCentsToBrl(NaN)).toThrow()
+    expect(() => formatCentsToBrl(Infinity)).toThrow()
+    expect(() => formatCentsToBrl(-Infinity)).toThrow()
+  })
+
+  it('formats zero and negative values correctly', () => {
+    expect(formatCentsToBrl(0)).toBe('0,00')
+    expect(formatCentsToBrl(-5)).toBe('-0,05')
   })
 })

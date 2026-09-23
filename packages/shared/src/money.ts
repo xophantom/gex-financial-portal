@@ -12,7 +12,11 @@ export function parseBrlToCents(input: string): number {
   // ponto flutuante: 15.53 * 100 é 1552.9999999999998 em IEEE 754.
   const cents = Number(`${reais.replace(/\./g, '')}${decimals.padEnd(2, '0')}`)
 
-  if (!Number.isSafeInteger(cents) || cents <= 0) {
+  if (!Number.isSafeInteger(cents)) {
+    throw new Error(`Valor acima do limite suportado: ${input}`)
+  }
+
+  if (cents <= 0) {
     throw new Error(`Valor deve ser maior que zero: ${input}`)
   }
 
@@ -20,6 +24,10 @@ export function parseBrlToCents(input: string): number {
 }
 
 export function formatCentsToBrl(cents: number): string {
+  if (!Number.isSafeInteger(cents)) {
+    throw new Error(`Centavos inválido: ${cents}`)
+  }
+
   const sign = cents < 0 ? '-' : ''
   const digits = String(Math.abs(cents)).padStart(3, '0')
   const reais = digits.slice(0, -2).replace(/\B(?=(\d{3})+(?!\d))/g, '.')
