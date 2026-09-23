@@ -14,6 +14,36 @@ type RequestWithRequester = Prisma.RequestGetPayload<{
   include: { requester: { select: { id: true; name: true } } };
 }>;
 
+// Nomes de coluna (snake_case), como o Postgres/Prisma os relata em
+// meta.target — confirmado batendo em um P2002 real contra o schema desta
+// tabela, não assumido.
+const DUPLICATE_INVOICE_COLUMNS = ['supplier_cnpj', 'invoice_number'];
+
+// P2002 dispara para QUALQUER violação de unicidade na tabela, não só a de
+// negócio — Request.id e RequestStatusEvent.id também são colunas únicas
+// (chaves primárias geradas por randomUUID()). Hoje elas nunca colidem, mas
+// "não é alcançável hoje" já mordeu este projeto quatro vezes: no dia em que
+// alguém acrescentar uma nova constraint única a Request ou
+// RequestStatusEvent, um P2002 dela seria erroneamente reportado ao cliente
+// como "nota duplicada" sem esta checagem do meta.target.
+function isDuplicateInvoiceViolation(
+  error: unknown,
+): error is Prisma.PrismaClientKnownRequestError {
+  if (
+    !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+    error.code !== 'P2002'
+  ) {
+    return false;
+  }
+
+  const target = error.meta?.target;
+  return (
+    Array.isArray(target) &&
+    target.length === DUPLICATE_INVOICE_COLUMNS.length &&
+    DUPLICATE_INVOICE_COLUMNS.every((column) => target.includes(column))
+  );
+}
+
 @Injectable()
 export class RequestsService {
   constructor(
@@ -40,25 +70,32 @@ export class RequestsService {
     requester: Viewer,
     idempotencyKey?: string,
   ) {
+    // Calculada uma vez, mesmo antes de saber se vai replay ou criar: tem que
+    // ser exatamente a mesma fingerprint tanto na leitura (recall) quanto na
+    // escrita (remember) para uma requisição idêntica bater consigo mesma.
+    const fingerprint = idempotencyKey
+      ? this.idempotency.fingerprint(input)
+      : undefined;
+
     if (idempotencyKey) {
-      const replayed = await this.idempotency.recall(idempotencyKey);
+      const replayed = await this.idempotency.recall(
+        requester.id,
+        idempotencyKey,
+        fingerprint!,
+      );
       if (replayed) return replayed;
     }
 
     const created = await this.repository
       .create(input, requester.id)
       .catch((error: unknown) => {
-        // P2002 é violação de restrição única; a única que existe nesta
-        // tabela é (supplier_cnpj, invoice_number), e é o banco arbitrando a
-        // corrida entre criações concorrentes, não uma checagem prévia da
-        // aplicação (que teria uma janela de corrida entre o SELECT e o
-        // INSERT). PrismaClientKnownRequestError vem de @prisma/client, que
-        // apps/api importa direto (não de @gex/shared, que é ESM) — então,
-        // ao contrário de ZodError, instanceof é seguro aqui.
-        if (
-          error instanceof Prisma.PrismaClientKnownRequestError &&
-          error.code === 'P2002'
-        ) {
+        // PrismaClientKnownRequestError vem de @prisma/client, que apps/api
+        // importa direto (não de @gex/shared, que é ESM) — então, ao
+        // contrário de ZodError, instanceof é seguro aqui.
+        // isDuplicateInvoiceViolation ainda confirma QUAL constraint disparou
+        // (ver comentário na função) antes de traduzir para o código de
+        // negócio.
+        if (isDuplicateInvoiceViolation(error)) {
           throw new AppException(
             'DUPLICATE_INVOICE',
             'Já existe uma solicitação com este CNPJ e número de nota',
@@ -69,8 +106,14 @@ export class RequestsService {
       });
 
     const response = this.toResponse(created, this.clock.today());
-    if (idempotencyKey)
-      await this.idempotency.remember(idempotencyKey, response);
+    if (idempotencyKey) {
+      await this.idempotency.remember(
+        requester.id,
+        idempotencyKey,
+        fingerprint!,
+        response,
+      );
+    }
 
     return response;
   }
