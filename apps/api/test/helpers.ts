@@ -34,6 +34,13 @@ export interface TestApp {
 // mesmo processo de teste.
 const TEST_JWT_SECRET = 'test-jwt-secret';
 const TEST_JWT_REFRESH_SECRET = 'test-jwt-refresh-secret';
+// Mesmo valor fixo do smoke test (scripts/smoke-test.ts): sem isto,
+// ClockService cai para a data real do relógio (Global module, instanciado
+// eagerly no compile()), e qualquer asserção de "vencido" no seed vira uma
+// bomba-relógio que só falha no dia em que a data real ultrapassa os
+// vencimentos fixos do seed — exatamente o tipo de acoplamento que
+// ClockService existe para eliminar.
+const TEST_APP_TODAY = '2026-09-18';
 
 export async function createTestApp(): Promise<TestApp> {
   const databaseUrl = await startTestDatabase();
@@ -45,6 +52,7 @@ export async function createTestApp(): Promise<TestApp> {
   process.env.REDIS_URL = redisUrl;
   process.env.JWT_SECRET = TEST_JWT_SECRET;
   process.env.JWT_REFRESH_SECRET = TEST_JWT_REFRESH_SECRET;
+  process.env.APP_TODAY = TEST_APP_TODAY;
 
   const seeder = new PrismaClient({
     datasources: { db: { url: databaseUrl } },

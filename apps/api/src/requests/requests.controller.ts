@@ -1,22 +1,27 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
+import { listRequestsQuerySchema, type ListRequestsQuery } from '@gex/shared';
 import { CurrentUser } from '../auth/current-user.decorator';
-import type { AuthenticatedUser } from '../auth/jwt.strategy';
-import { Roles } from '../auth/roles.decorator';
+import { ZodValidationPipe } from '../common/zod-validation.pipe';
+import type { Viewer } from './requests.repository';
+import { RequestsService } from './requests.service';
 
-// Stub deliberado: o domínio de solicitações é da Fase 3 (próxima). Esta
-// rota existe só para dar à Tarefa 11 uma rota real, protegida por
-// @Roles('FINANCE'), que prove a cadeia JwtGuard + RolesGuard funcionando
-// sobre HTTP de verdade — sem isso não há como testar via requisição que um
-// REQUESTER é barrado de uma rota FINANCE-only (só existiria em memória).
-//
-// Sem @UseGuards aqui de propósito (fix round 2): JwtGuard e RolesGuard são
-// APP_GUARD globais agora — default-nega — então este controller já nasce
-// protegido sem precisar lembrar de anotar nada além do @Roles.
+// Sem @Roles aqui de propósito: GET /requests é do domínio inteiro, não
+// FINANCE-only — o enunciado exige que um solicitante liste as próprias
+// solicitações. O escopo (tudo vs. só as próprias) é decidido no where() do
+// repositório a partir do papel do viewer, não recusando a rota. JwtGuard e
+// RolesGuard continuam cobrindo isto via APP_GUARD global; sem @Roles, o
+// RolesGuard deixa passar qualquer usuário autenticado, que é exatamente o
+// que se quer aqui.
 @Controller('requests')
 export class RequestsController {
+  constructor(private readonly service: RequestsService) {}
+
   @Get()
-  @Roles('FINANCE')
-  list(@CurrentUser() user: AuthenticatedUser): { requestedBy: string } {
-    return { requestedBy: user.id };
+  list(
+    @Query(new ZodValidationPipe(listRequestsQuerySchema))
+    query: ListRequestsQuery,
+    @CurrentUser() viewer: Viewer,
+  ) {
+    return this.service.list(query, viewer);
   }
 }
