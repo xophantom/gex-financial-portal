@@ -23,10 +23,19 @@ const ACTION_TARGET: Record<RequestAction, RequestStatus> = {
 }
 
 export function canTransition(from: RequestStatus, to: RequestStatus): boolean {
+  if (!REQUEST_STATUSES.includes(from)) {
+    throw new Error(`Status inválido: ${from}`)
+  }
+  if (!REQUEST_STATUSES.includes(to)) {
+    throw new Error(`Status inválido: ${to}`)
+  }
   return TRANSITIONS[from].includes(to)
 }
 
 export function nextStatusFor(action: RequestAction): RequestStatus {
+  if (!(action in ACTION_TARGET)) {
+    throw new Error(`Ação inválida: ${action}`)
+  }
   return ACTION_TARGET[action]
 }
 

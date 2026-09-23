@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   REQUEST_STATUSES,
+  REQUEST_ACTIONS,
   allowedActionsFor,
   canTransition,
   nextStatusFor,
@@ -69,4 +70,50 @@ describe('allowedActionsFor', () => {
       expect(allowedActionsFor(status, 'FINANCE')).toEqual([])
     },
   )
+})
+
+describe('Guard: nextStatusFor invalid action', () => {
+  it('throws for an invalid action', () => {
+    const invalidAction = 'INVALID_ACTION' as never
+    expect(() => nextStatusFor(invalidAction)).toThrow('Ação inválida: INVALID_ACTION')
+  })
+})
+
+describe('Guard: canTransition invalid statuses', () => {
+  it('throws for an invalid from status', () => {
+    const invalidStatus = 'BOGUS' as never
+    expect(() => canTransition(invalidStatus, 'PAID')).toThrow('Status inválido: BOGUS')
+  })
+
+  it('throws for an invalid to status', () => {
+    const invalidStatus = 'BOGUS' as never
+    expect(() => canTransition('PENDING', invalidStatus)).toThrow('Status inválido: BOGUS')
+  })
+})
+
+describe('Regression: existing behavior still works', () => {
+  it('still allows legal transitions', () => {
+    expect(canTransition('PENDING', 'APPROVED')).toBe(true)
+    expect(canTransition('PENDING', 'REJECTED')).toBe(true)
+    expect(canTransition('APPROVED', 'PAID')).toBe(true)
+  })
+
+  it('still offers correct actions for finance on PENDING', () => {
+    expect(allowedActionsFor('PENDING', 'FINANCE')).toEqual(['APPROVE', 'REJECT'])
+  })
+
+  it('still offers nothing to requester', () => {
+    expect(allowedActionsFor('PENDING', 'REQUESTER')).toEqual([])
+  })
+})
+
+describe('Invariant: every action is available somewhere', () => {
+  it('ensures no dead actions', () => {
+    for (const action of REQUEST_ACTIONS) {
+      const available = REQUEST_STATUSES.some((status) =>
+        allowedActionsFor(status, 'FINANCE').includes(action)
+      )
+      expect(available).toBe(true)
+    }
+  })
 })
