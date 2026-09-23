@@ -1,9 +1,12 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { LoggerModule } from 'nestjs-pino';
+import { AuthModule } from './auth/auth.module';
 import { ClockModule } from './clock/clock.module';
 import { CorrelationMiddleware } from './common/correlation.middleware';
 import { buildLogger } from './common/logger';
 import { PrismaModule } from './prisma/prisma.module';
+import { RedisModule } from './redis/redis.module';
+import { RequestsModule } from './requests/requests.module';
 
 @Module({
   imports: [
@@ -12,6 +15,9 @@ import { PrismaModule } from './prisma/prisma.module';
     LoggerModule.forRoot({ pinoHttp: { logger: buildLogger() } }),
     PrismaModule,
     ClockModule,
+    RedisModule,
+    AuthModule,
+    RequestsModule,
   ],
   controllers: [],
   providers: [],
