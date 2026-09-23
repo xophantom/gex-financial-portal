@@ -8,7 +8,27 @@ import {
 } from '@nestjs/common';
 import type { ErrorCode, ErrorDetail } from '@gex/shared';
 import type { Response } from 'express';
-import { ZodError } from 'zod';
+
+interface ZodLikeError extends Error {
+  issues: { path: (string | number)[]; message: string }[];
+}
+
+// Não usa `instanceof ZodError`: apps/api compila para CommonJS (tsconfig
+// "nodenext" sem "type": "module") e faz require('zod'), enquanto @gex/shared
+// é ESM e importa 'zod' via import — o pacote zod 3.25.x publica builds CJS e
+// ESM genuinamente separados (dois arquivos, não um wrapper fino), então são
+// duas classes ZodError distintas em runtime e instanceof falha, caindo no
+// branch genérico de 500. Confirmado batendo no binário compilado de
+// verdade: login com e-mail inválido e GET /requests?page=0 voltavam 500 em
+// vez de 422. Checar a forma do erro (nome + issues), em vez da identidade
+// da classe, funciona não importa de qual build do zod ele veio.
+function isZodLikeError(exception: unknown): exception is ZodLikeError {
+  return (
+    exception instanceof Error &&
+    exception.name === 'ZodError' &&
+    Array.isArray((exception as { issues?: unknown }).issues)
+  );
+}
 
 export class AppException extends Error {
   constructor(
@@ -54,7 +74,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       return;
     }
 
-    if (exception instanceof ZodError) {
+    if (isZodLikeError(exception)) {
       response.status(HttpStatus.UNPROCESSABLE_ENTITY).json({
         error: {
           code: 'VALIDATION_ERROR',
