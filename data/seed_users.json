@@ -1,0 +1,23 @@
+[
+  {
+    "id": "10000000-0000-4000-8000-000000000001",
+    "name": "Ana Solicitante",
+    "email": "solicitante@gex.test",
+    "role": "REQUESTER",
+    "seed_password": "GexRequester123!"
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000002",
+    "name": "Bruno Solicitante",
+    "email": "outro.solicitante@gex.test",
+    "role": "REQUESTER",
+    "seed_password": "GexRequester456!"
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000003",
+    "name": "Fernanda Financeiro",
+    "email": "financeiro@gex.test",
+    "role": "FINANCE",
+    "seed_password": "GexFinance123!"
+  }
+]

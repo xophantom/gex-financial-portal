@@ -1,0 +1,16 @@
+{
+  "name": "gex-financial-portal",
+  "private": true,
+  "packageManager": "pnpm@10.30.0",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "db:migrate": "pnpm --filter @gex/api db:migrate",
+    "db:seed": "pnpm --filter @gex/api db:seed",
+    "demo:concurrency": "tsx scripts/demo-concurrency.ts"
+  },
+  "devDependencies": { "tsx": "^4.19.2", "typescript": "^5.7.3" }
+}
