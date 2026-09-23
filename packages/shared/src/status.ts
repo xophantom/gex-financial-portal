@@ -33,7 +33,7 @@ export function canTransition(from: RequestStatus, to: RequestStatus): boolean {
 }
 
 export function nextStatusFor(action: RequestAction): RequestStatus {
-  if (!(action in ACTION_TARGET)) {
+  if (!REQUEST_ACTIONS.includes(action)) {
     throw new Error(`Ação inválida: ${action}`)
   }
   return ACTION_TARGET[action]

@@ -117,3 +117,31 @@ describe('Invariant: every action is available somewhere', () => {
     }
   })
 })
+
+describe('Security: prototype-chain injection in nextStatusFor', () => {
+  it.each(['constructor', 'toString', 'valueOf', 'hasOwnProperty'] as const)(
+    'throws for prototype name %s',
+    (protoName) => {
+      const injected = protoName as never
+      expect(() => nextStatusFor(injected)).toThrow(`Ação inválida: ${protoName}`)
+    },
+  )
+})
+
+describe('Security: prototype-chain injection in canTransition', () => {
+  it.each(['constructor', 'toString', 'valueOf', 'hasOwnProperty'] as const)(
+    'throws for prototype name %s in from parameter',
+    (protoName) => {
+      const injected = protoName as never
+      expect(() => canTransition(injected, 'PAID')).toThrow(`Status inválido: ${protoName}`)
+    },
+  )
+
+  it.each(['constructor', 'toString', 'valueOf', 'hasOwnProperty'] as const)(
+    'throws for prototype name %s in to parameter',
+    (protoName) => {
+      const injected = protoName as never
+      expect(() => canTransition('PENDING', injected)).toThrow(`Status inválido: ${protoName}`)
+    },
+  )
+})
