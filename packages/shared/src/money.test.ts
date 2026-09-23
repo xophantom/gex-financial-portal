@@ -35,8 +35,7 @@ describe('parseBrlToCents', () => {
   })
 
   it('distinguishes magnitude overflow from zero/negative values', () => {
-    const error = expect(() => parseBrlToCents('90071992547409929,00')).toThrow()
-    error.toHaveProperty('message', expect.stringContaining('limite suportado'))
+    expect(() => parseBrlToCents('90071992547409929,00')).toThrow(/limite suportado/)
   })
 })
 
