@@ -3,10 +3,8 @@ import { dirname, join } from 'node:path'
 import { PrismaClient, RequestCategory } from '@prisma/client'
 import argon2 from 'argon2'
 
-// __dirname aponta para apps/api/prisma em dev (tsx roda o .ts na origem) e
-// para apps/api/dist/prisma quando compilado — o `dist` insere um nível a
-// mais, então uma contagem fixa de "../" acerta um caso e erra o outro.
-// Subimos a árvore até achar a pasta data/ na raiz do monorepo.
+// __dirname muda entre dev (prisma/) e build (dist/prisma/), então sobe a
+// árvore até achar data/ em vez de fixar a quantidade de "../".
 function findDataDir(start: string): string {
   let dir = start
   for (let i = 0; i < 8; i += 1) {
@@ -24,9 +22,8 @@ const DATA = findDataDir(__dirname)
 const read = <T>(file: string): T[] =>
   JSON.parse(readFileSync(join(DATA, file), 'utf8')) as T[]
 
-// O client do Prisma expõe o enum pelo nome declarado no schema (SERVICOS),
-// não pelo valor mapeado para o banco (SERVIÇOS) — o dado de origem traz o
-// valor com acento, então é preciso traduzir antes de passar para o client.
+// O client do Prisma usa a chave do enum (SERVICOS), não o valor com acento
+// do @map que vem nos dados de origem.
 const CATEGORY_BY_LABEL = new Map<string, RequestCategory>([
   ['SOFTWARE', 'SOFTWARE'],
   ['SERVIÇOS', 'SERVICOS'],
@@ -42,21 +39,32 @@ export function toRequestCategory(label: string): RequestCategory {
   return category
 }
 
+// Roda a cada boot do container, então só cria o que falta: sobrescrever
+// linhas existentes desfaria transições feitas pela aplicação e deixaria os
+// eventos de auditoria novos incoerentes com o status.
 export async function seed(prisma: PrismaClient): Promise<void> {
-  for (const user of read<Record<string, string>>('seed_users.json')) {
-    const passwordHash = await argon2.hash(user.seed_password, { type: argon2.argon2id })
-    const data = {
-      name: user.name,
-      email: user.email,
-      role: user.role as 'REQUESTER' | 'FINANCE',
-      passwordHash,
-    }
+  const existingUsers = new Set(
+    (await prisma.user.findMany({ select: { id: true } })).map(({ id }) => id),
+  )
 
-    await prisma.user.upsert({ where: { id: user.id }, create: { id: user.id, ...data }, update: data })
+  for (const user of read<Record<string, string>>('seed_users.json')) {
+    // argon2 é caro de propósito: só calcula para quem ainda não existe.
+    if (existingUsers.has(user.id)) continue
+
+    await prisma.user.create({
+      data: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role as 'REQUESTER' | 'FINANCE',
+        passwordHash: await argon2.hash(user.seed_password, { type: argon2.argon2id }),
+      },
+    })
   }
 
-  for (const row of read<Record<string, never>>('seed_requests.json')) {
-    const data = {
+  await prisma.request.createMany({
+    data: read<Record<string, never>>('seed_requests.json').map((row) => ({
+      id: row.id,
       requesterId: row.requester_id,
       supplierName: row.supplier_name,
       supplierCnpj: row.supplier_cnpj,
@@ -72,27 +80,22 @@ export async function seed(prisma: PrismaClient): Promise<void> {
       paymentReference: row.payment_reference,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
-    }
+    })),
+    skipDuplicates: true,
+  })
 
-    await prisma.request.upsert({ where: { id: row.id }, create: { id: row.id, ...data }, update: data })
-  }
-
-  for (const event of read<Record<string, never>>('seed_audit_events.json')) {
-    const data = {
+  await prisma.requestStatusEvent.createMany({
+    data: read<Record<string, never>>('seed_audit_events.json').map((event) => ({
+      id: event.id,
       requestId: event.request_id,
       actorId: event.actor_id,
       previousStatus: event.previous_status,
       newStatus: event.new_status,
       reason: event.reason,
       createdAt: new Date(event.created_at),
-    }
-
-    await prisma.requestStatusEvent.upsert({
-      where: { id: event.id },
-      create: { id: event.id, ...data },
-      update: data,
-    })
-  }
+    })),
+    skipDuplicates: true,
+  })
 }
 
 if (require.main === module) {
