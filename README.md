@@ -122,6 +122,11 @@ no web e no shared).
   mutações chamam `router.refresh()`, então não sobra cache de cliente para
   gerenciar. Zustand guarda toasts e o diálogo aberto; nuqs mantém filtros e
   página na URL (busca compartilhável, botão voltar funciona).
+- **Interface com shadcn/ui (Radix).** Os primitivos (botão, campo, diálogo,
+  tabela, toasts via Sonner) vêm do shadcn, que já resolve foco, teclado e
+  leitores de tela; o que é do produto fica em `features/`. A paleta (papel,
+  tinta, caneta azul e uma cor por status) mora em tokens no `globals.css`, e o
+  único elemento de destaque é o carimbo de status no detalhe da solicitação.
 - **Observabilidade.** Logs estruturados (pino) com `x-correlation-id` e
   redação de credenciais e dados financeiros; traces OpenTelemetry visíveis no
   Jaeger.
