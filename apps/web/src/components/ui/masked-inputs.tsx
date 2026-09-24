@@ -1,6 +1,6 @@
 'use client'
 
-import { formatCentsToBrl, formatCnpj, parseBrlToCents } from '@gex/shared'
+import { formatCentsToBrl, parseBrlToCents } from '@gex/shared'
 import { Input } from '@/components/ui/input'
 
 // Por baixo, o Input do design system: mesma borda, foco e estado de erro
@@ -54,10 +54,17 @@ export interface CnpjInputProps extends BaseInputProps {
   onChange: (digits: string) => void
 }
 
+// Máscara progressiva: 12.345.678/0001-95 vai se formando a cada dígito.
+function maskCnpj(digits: string): string {
+  return digits
+    .replace(/^(\d{2})(\d)/, '$1.$2')
+    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/\.(\d{3})(\d)/, '.$1/$2')
+    .replace(/(\d{4})(\d)/, '$1-$2')
+}
+
 export function CnpjInput({ value, onChange, ...rest }: CnpjInputProps) {
-  const digits = value.replace(/\D/g, '').slice(0, 14)
-  // formatCnpj só formata os 14 dígitos completos; até lá, dígitos crus.
-  const display = digits.length === 14 ? formatCnpj(digits) : digits
+  const display = maskCnpj(value.replace(/\D/g, '').slice(0, 14))
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     onChange(event.target.value.replace(/\D/g, '').slice(0, 14))
