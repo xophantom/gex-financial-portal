@@ -45,8 +45,9 @@ Com `APP_TODAY=2026-09-18` (o default do Compose), o perfil `FINANCE` deve ver:
 
 ```bash
 pnpm test                          # unitários: @gex/shared, @gex/web, @gex/api
+pnpm lint && pnpm format:check     # ESLint e Prettier (config única na raiz)
 pnpm --filter @gex/api test:e2e    # integração com Postgres real via Testcontainers (exige Docker)
-pnpm demo:concurrency               # prova de concorrência contra o stack rodando
+pnpm demo:concurrency              # prova de concorrência contra o stack rodando
 ```
 
 `pnpm demo:concurrency` dispara 8 criações idênticas e, em seguida, 8
@@ -60,11 +61,32 @@ vez de deixar duas requisições concorrentes criarem ou aprovarem em duplicado.
 ## Estrutura
 
 ```text
-apps/api         NestJS + Prisma (migrations e seed em apps/api/prisma)
-apps/web         Next.js (App Router); rotas em app/api fazem de BFF e guardam o JWT em cookie httpOnly
-packages/shared  regras de domínio puras: dinheiro, CNPJ, competência, máquina de status e schemas Zod
-data/            dados fornecidos pelo desafio, carregados pelo seed sem alteração
+apps/api/
+  prisma/               schema, migrations e seed
+  src/
+    auth/               login, JWT, guards e decorators de perfil
+    requests/           solicitações: listagem, criação, decisão, pagamento e auditoria
+    dashboard/          indicadores agregados por perfil
+    health/             liveness de banco e Redis
+    common/             erros, pipes/middleware HTTP, logging e utilitários
+    infra/              Prisma, Redis, relógio (APP_TODAY) e telemetria
+  test/                 e2e contra Postgres e Redis reais (Testcontainers)
+  scripts/smoke-test.ts sobe o build compilado e confere o boot
+apps/web/src/
+  app/                  rotas (App Router) e o BFF em app/api, que guarda o JWT em cookie httpOnly
+  components/           ui/ (primitivos) e layout/ (navegação)
+  features/             auth, dashboard e requests
+  lib/                  cliente da API, sessão e formatação
+packages/shared/src/
+  domain/               dinheiro, CNPJ, competência, datas e máquina de status
+  schemas/              validação Zod usada pela API e pelos formulários
+  contracts/            formato das respostas HTTP e códigos de erro
+data/                   dados do desafio, carregados pelo seed sem alteração
+scripts/                demo de concorrência contra o stack rodando
 ```
+
+Testes unitários ficam ao lado do código (`*.spec.ts` na API, `*.test.ts(x)`
+no web e no shared).
 
 ## Decisões e trade-offs
 
