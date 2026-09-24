@@ -22,9 +22,6 @@ export default tseslint.config(
   },
   {
     rules: {
-      '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-floating-promises': 'warn',
-      '@typescript-eslint/no-unsafe-argument': 'warn',
       // As specs de contrato testam "campo ausente" destruturando-o só para
       // excluí-lo do resto (`const { x, ...rest } = obj`); a variável nunca é
       // lida de propósito, então marcá-la como não usada seria falso positivo.
