@@ -4,18 +4,15 @@ import { ClockService } from './clock/clock.service';
 import { PrismaService } from './prisma/prisma.service';
 
 describe('AppModule', () => {
-  // AuthModule agora exige JWT_SECRET/JWT_REFRESH_SECRET para resolver seus
-  // providers — nenhum dos dois tem fallback (Tarefa 11, fix round 1: um
-  // valor padrão ali seria um segredo previsível e publicado em
-  // .env.example). Sem setar as duas aqui, compile() rejeitaria antes de
-  // chegar em PrismaService, e esta suíte é sobre PrismaService/ClockService,
-  // não sobre validar segredo — por isso um valor de teste, não a checagem
-  // enfraquecida.
+  // AuthModule exige os segredos JWT e o HealthDatabaseClient exige
+  // DATABASE_URL (sem fallback); valores de teste aqui em vez de enfraquecer
+  // as checagens. compile() não conecta ao banco.
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
     process.env.JWT_SECRET = 'app-module-spec-secret';
     process.env.JWT_REFRESH_SECRET = 'app-module-spec-refresh-secret';
+    process.env.DATABASE_URL = 'postgresql://user:pass@localhost:5432/app';
   });
 
   afterEach(() => {
@@ -32,16 +29,19 @@ describe('AppModule', () => {
       imports: [AppModule],
     }).compile();
 
-    const prisma = moduleRef.get(PrismaService);
-    const clock = moduleRef.get(ClockService);
+    // finally: sem fechar o módulo, a conexão do Redis mantém o Jest vivo.
+    try {
+      const prisma = moduleRef.get(PrismaService);
+      const clock = moduleRef.get(ClockService);
 
-    // PrismaClient (a base da PrismaService) devolve um Proxy do seu próprio
-    // construtor, então `instanceof PrismaService` não é confiável aqui; o
-    // método herdado $connect é evidência direta de que é um client real.
-    expect(prisma).toBeDefined();
-    expect(typeof prisma.$connect).toBe('function');
-    expect(clock).toBeInstanceOf(ClockService);
-
-    await moduleRef.close();
+      // PrismaClient devolve um Proxy do próprio construtor, então
+      // `instanceof PrismaService` não é confiável; $connect herdado prova
+      // que é um client real.
+      expect(prisma).toBeDefined();
+      expect(typeof prisma.$connect).toBe('function');
+      expect(clock).toBeInstanceOf(ClockService);
+    } finally {
+      await moduleRef.close();
+    }
   });
 });
