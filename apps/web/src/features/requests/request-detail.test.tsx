@@ -18,7 +18,9 @@ beforeEach(() => {
 
 describe('RequestDetail — action gating', () => {
   it('renders every action allowed_actions grants', () => {
-    render(<RequestDetail request={baseRequest} history={[]} allowedActions={['APPROVE', 'REJECT']} />)
+    render(
+      <RequestDetail request={baseRequest} history={[]} allowedActions={['APPROVE', 'REJECT']} />,
+    )
 
     expect(screen.getByRole('button', { name: /aprovar/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /rejeitar/i })).toBeInTheDocument()
@@ -94,7 +96,13 @@ describe('RequestDetail — dialog', () => {
     await userEvent.click(screen.getByRole('button', { name: /aprovar/i }))
     unmount()
 
-    render(<RequestDetail request={{ ...baseRequest, id: 'other' }} history={[]} allowedActions={['APPROVE']} />)
+    render(
+      <RequestDetail
+        request={{ ...baseRequest, id: 'other' }}
+        history={[]}
+        allowedActions={['APPROVE']}
+      />,
+    )
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })

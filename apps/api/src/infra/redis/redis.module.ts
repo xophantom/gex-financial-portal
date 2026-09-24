@@ -1,5 +1,5 @@
-import { Global, Module } from '@nestjs/common';
-import { RedisService } from './redis.service';
+import { Global, Module } from '@nestjs/common'
+import { RedisService } from './redis.service'
 
 // Global como PrismaModule e ClockModule: infraestrutura usada por vários
 // domínios (auth, requests, dashboard, health).

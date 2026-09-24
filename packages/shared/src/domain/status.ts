@@ -39,13 +39,8 @@ export function nextStatusFor(action: RequestAction): RequestStatus {
   return ACTION_TARGET[action]
 }
 
-export function allowedActionsFor(
-  status: RequestStatus,
-  role: UserRole,
-): RequestAction[] {
+export function allowedActionsFor(status: RequestStatus, role: UserRole): RequestAction[] {
   if (role !== 'FINANCE') return []
 
-  return REQUEST_ACTIONS.filter((action) =>
-    canTransition(status, ACTION_TARGET[action]),
-  )
+  return REQUEST_ACTIONS.filter((action) => canTransition(status, ACTION_TARGET[action]))
 }

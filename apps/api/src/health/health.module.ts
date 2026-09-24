@@ -1,6 +1,6 @@
-import { Module } from '@nestjs/common';
-import { HealthDatabaseClient } from './health-database.client';
-import { HealthController } from './health.controller';
+import { Module } from '@nestjs/common'
+import { HealthDatabaseClient } from './health-database.client'
+import { HealthController } from './health.controller'
 
 // RedisService não precisa entrar em imports: RedisModule é @Global(), já
 // está disponível para injeção aqui. HealthDatabaseClient é diferente de

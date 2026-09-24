@@ -111,7 +111,7 @@ describe('Invariant: every action is available somewhere', () => {
   it('ensures no dead actions', () => {
     for (const action of REQUEST_ACTIONS) {
       const available = REQUEST_STATUSES.some((status) =>
-        allowedActionsFor(status, 'FINANCE').includes(action)
+        allowedActionsFor(status, 'FINANCE').includes(action),
       )
       expect(available).toBe(true)
     }

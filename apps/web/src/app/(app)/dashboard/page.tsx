@@ -50,7 +50,10 @@ function SummarySkeleton() {
   return (
     <div role="status" aria-live="polite">
       <span className="sr-only">Carregando indicadores...</span>
-      <div aria-hidden="true" className="mt-1 h-5 w-40 animate-pulse rounded bg-zinc-100 dark:bg-zinc-900" />
+      <div
+        aria-hidden="true"
+        className="mt-1 h-5 w-40 animate-pulse rounded bg-zinc-100 dark:bg-zinc-900"
+      />
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, index) => (
           <div

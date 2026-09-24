@@ -5,13 +5,13 @@ import {
   HttpException,
   HttpStatus,
   Logger,
-} from '@nestjs/common';
-import type { ErrorCode, ErrorDetail } from '@gex/shared';
-import type { Response } from 'express';
-import { AppException } from './app.exception';
+} from '@nestjs/common'
+import type { ErrorCode, ErrorDetail } from '@gex/shared'
+import type { Response } from 'express'
+import { AppException } from './app.exception'
 
 interface ZodLikeError extends Error {
-  issues: { path: (string | number)[]; message: string }[];
+  issues: { path: (string | number)[]; message: string }[]
 }
 
 // Pela forma, não por `instanceof ZodError`: a API (CommonJS) e o
@@ -21,13 +21,13 @@ function isZodLikeError(exception: unknown): exception is ZodLikeError {
     exception instanceof Error &&
     exception.name === 'ZodError' &&
     Array.isArray((exception as { issues?: unknown }).issues)
-  );
+  )
 }
 
 interface HttpErrorMapping {
-  code: ErrorCode;
-  message: string;
-  status?: number;
+  code: ErrorCode
+  message: string
+  status?: number
 }
 
 // Erros do Nest e do Express chegam com texto em inglês ("Cannot GET /x",
@@ -59,22 +59,22 @@ const HTTP_ERRORS: Record<number, HttpErrorMapping> = {
     code: 'TOO_MANY_REQUESTS',
     message: 'Muitas tentativas. Tente novamente em instantes.',
   },
-};
+}
 
 // body-parser rejeita com http-errors (ex.: 413), que não são HttpException.
 function httpStatusOf(exception: unknown): number | undefined {
-  if (exception instanceof HttpException) return exception.getStatus();
+  if (exception instanceof HttpException) return exception.getStatus()
 
-  const candidate = exception as { status?: unknown; expose?: unknown };
+  const candidate = exception as { status?: unknown; expose?: unknown }
   if (
     exception instanceof Error &&
     candidate.expose === true &&
     typeof candidate.status === 'number'
   ) {
-    return candidate.status;
+    return candidate.status
   }
 
-  return undefined;
+  return undefined
 }
 
 function mappingFor(status: number): HttpErrorMapping {
@@ -83,15 +83,15 @@ function mappingFor(status: number): HttpErrorMapping {
     (status >= 500
       ? { code: 'INTERNAL_ERROR', message: 'Erro interno' }
       : { code: 'VALIDATION_ERROR', message: 'Requisição inválida' })
-  );
+  )
 }
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
-  private readonly logger = new Logger(HttpExceptionFilter.name);
+  private readonly logger = new Logger(HttpExceptionFilter.name)
 
   catch(exception: unknown, host: ArgumentsHost): void {
-    const response = host.switchToHttp().getResponse<Response>();
+    const response = host.switchToHttp().getResponse<Response>()
 
     if (exception instanceof AppException) {
       response.status(exception.status).json({
@@ -100,8 +100,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
           message: exception.message,
           ...(exception.details && { details: exception.details }),
         },
-      });
-      return;
+      })
+      return
     }
 
     if (isZodLikeError(exception)) {
@@ -114,27 +114,25 @@ export class HttpExceptionFilter implements ExceptionFilter {
             message: issue.message,
           })),
         },
-      });
-      return;
+      })
+      return
     }
 
-    const status = httpStatusOf(exception);
+    const status = httpStatusOf(exception)
     if (status !== undefined) {
-      if (status >= 500) this.logger.error(exception);
-      const mapping = mappingFor(status);
+      if (status >= 500) this.logger.error(exception)
+      const mapping = mappingFor(status)
       response.status(mapping.status ?? status).json({
         error: { code: mapping.code, message: mapping.message },
-      });
-      return;
+      })
+      return
     }
 
     // A mensagem original pode conter connection string ou segredo: vai só
     // para o log estruturado, nunca para a resposta.
-    this.logger.error(
-      exception instanceof Error ? exception : new Error(String(exception)),
-    );
+    this.logger.error(exception instanceof Error ? exception : new Error(String(exception)))
     response.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       error: { code: 'INTERNAL_ERROR', message: 'Erro interno' },
-    });
+    })
   }
 }

@@ -19,7 +19,8 @@ export const useUiStore = create<UiState>((set) => ({
   toasts: [],
   pushToast: (toast) =>
     set((state) => ({ toasts: [...state.toasts, { id: crypto.randomUUID(), ...toast }] })),
-  dismissToast: (id) => set((state) => ({ toasts: state.toasts.filter((toast) => toast.id !== id) })),
+  dismissToast: (id) =>
+    set((state) => ({ toasts: state.toasts.filter((toast) => toast.id !== id) })),
   openDialog: null,
   setOpenDialog: (openDialog) => set({ openDialog }),
 }))

@@ -6,7 +6,11 @@ import { readTokens, sealSession } from '@/lib/session/server'
 import { API_BASE_URL } from './base-url'
 
 export class ApiError extends Error {
-  constructor(readonly status: number, readonly code: ErrorCode, message: string) {
+  constructor(
+    readonly status: number,
+    readonly code: ErrorCode,
+    message: string,
+  ) {
     super(message)
   }
 }

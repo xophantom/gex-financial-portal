@@ -67,7 +67,11 @@ describe('guardSession', () => {
 
     expect(response.headers.get('location')).toBe('http://localhost/login')
     for (const name of ['gex_access', 'gex_refresh', 'gex_user']) {
-      expect(response.cookies.get(name)).toMatchObject({ value: '', path: '/', expires: new Date(0) })
+      expect(response.cookies.get(name)).toMatchObject({
+        value: '',
+        path: '/',
+        expires: new Date(0),
+      })
     }
   })
 

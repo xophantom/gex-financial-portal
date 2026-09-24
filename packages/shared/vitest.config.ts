@@ -13,7 +13,12 @@ export default defineConfig({
       include: ['src/**/*.ts'],
       // contracts/ é só tipos e constantes, index.ts só reexporta: sem lógica
       // para exercitar.
-      exclude: ['src/**/*.test.ts', 'src/schemas/test-helpers.ts', 'src/contracts/**', 'src/index.ts'],
+      exclude: [
+        'src/**/*.test.ts',
+        'src/schemas/test-helpers.ts',
+        'src/contracts/**',
+        'src/index.ts',
+      ],
       thresholds: { lines: 95, functions: 95, branches: 90 },
     },
   },

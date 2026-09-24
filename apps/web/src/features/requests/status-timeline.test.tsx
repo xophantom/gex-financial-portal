@@ -4,9 +4,30 @@ import { describe, expect, it } from 'vitest'
 import { StatusTimeline } from './status-timeline'
 
 const events: StatusEventResponse[] = [
-  { id: '1', previous_status: null, new_status: 'PENDING', reason: null, created_at: '2026-08-10T09:00:00-03:00', actor: { id: 'a', name: 'Ana Solicitante' } },
-  { id: '2', previous_status: 'PENDING', new_status: 'APPROVED', reason: null, created_at: '2026-09-01T10:00:00-03:00', actor: { id: 'f', name: 'Fernanda Financeiro' } },
-  { id: '3', previous_status: 'APPROVED', new_status: 'PAID', reason: 'PAG-2026-0010', created_at: '2026-09-05T14:00:00-03:00', actor: { id: 'f', name: 'Fernanda Financeiro' } },
+  {
+    id: '1',
+    previous_status: null,
+    new_status: 'PENDING',
+    reason: null,
+    created_at: '2026-08-10T09:00:00-03:00',
+    actor: { id: 'a', name: 'Ana Solicitante' },
+  },
+  {
+    id: '2',
+    previous_status: 'PENDING',
+    new_status: 'APPROVED',
+    reason: null,
+    created_at: '2026-09-01T10:00:00-03:00',
+    actor: { id: 'f', name: 'Fernanda Financeiro' },
+  },
+  {
+    id: '3',
+    previous_status: 'APPROVED',
+    new_status: 'PAID',
+    reason: 'PAG-2026-0010',
+    created_at: '2026-09-05T14:00:00-03:00',
+    actor: { id: 'f', name: 'Fernanda Financeiro' },
+  },
 ]
 
 describe('StatusTimeline', () => {

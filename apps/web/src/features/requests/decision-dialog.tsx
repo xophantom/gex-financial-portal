@@ -62,7 +62,9 @@ export function DecisionDialog({ requestId, decision, onClose, onSuccess }: Deci
           />
         </div>
       ) : (
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">Confirma a aprovação desta solicitação?</p>
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          Confirma a aprovação desta solicitação?
+        </p>
       )}
 
       <DialogError message={error} />

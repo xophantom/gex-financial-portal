@@ -1,9 +1,9 @@
-import { Module } from '@nestjs/common';
-import { DashboardModule } from '../dashboard/dashboard.module';
-import { IdempotencyService } from './idempotency.service';
-import { RequestsController } from './requests.controller';
-import { RequestsRepository } from './requests.repository';
-import { RequestsService } from './requests.service';
+import { Module } from '@nestjs/common'
+import { DashboardModule } from '../dashboard/dashboard.module'
+import { IdempotencyService } from './idempotency.service'
+import { RequestsController } from './requests.controller'
+import { RequestsRepository } from './requests.repository'
+import { RequestsService } from './requests.service'
 
 @Module({
   // DashboardModule: create/decide/markPaid precisam invalidar o cache de

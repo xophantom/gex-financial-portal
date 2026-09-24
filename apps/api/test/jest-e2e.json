@@ -4,10 +4,7 @@
   "testEnvironment": "node",
   "testRegex": ".e2e-spec.ts$",
   "transform": {
-    "^.+\\.(t|j)s$": [
-      "ts-jest",
-      { "tsconfig": "tsconfig.test.json" }
-    ]
+    "^.+\\.(t|j)s$": ["ts-jest", { "tsconfig": "tsconfig.test.json" }]
   },
   "moduleNameMapper": {
     "^@gex/shared$": "<rootDir>/../../../packages/shared/src/index",

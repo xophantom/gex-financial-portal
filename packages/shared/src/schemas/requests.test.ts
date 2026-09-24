@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { createRequestSchema, decisionSchema, listRequestsQuerySchema, markPaidSchema } from './requests.js'
+import {
+  createRequestSchema,
+  decisionSchema,
+  listRequestsQuerySchema,
+  markPaidSchema,
+} from './requests.js'
 import { ENGLISH_DEFAULT, firstIssue, localizedIssues } from './test-helpers.js'
 
 const validRequest = {
@@ -32,7 +37,9 @@ describe('createRequestSchema', () => {
     ['  NF-2026-1001  ', 'NF-2026-1001'],
     ['nf   2026\t1001', 'NF 2026 1001'],
   ])('normalizes the invoice number %j to %j', (invoice_number, expected) => {
-    expect(createRequestSchema.parse({ ...validRequest, invoice_number }).invoice_number).toBe(expected)
+    expect(createRequestSchema.parse({ ...validRequest, invoice_number }).invoice_number).toBe(
+      expected,
+    )
   })
 
   it('rejects a CNPJ with characters outside the mask', () => {
@@ -45,15 +52,11 @@ describe('createRequestSchema', () => {
   })
 
   it.each([0, -1, 1.5])('rejects the amount %s', (amount_cents) => {
-    expect(() =>
-      createRequestSchema.parse({ ...validRequest, amount_cents }),
-    ).toThrow()
+    expect(() => createRequestSchema.parse({ ...validRequest, amount_cents })).toThrow()
   })
 
   it('rejects a category outside the enum', () => {
-    expect(() =>
-      createRequestSchema.parse({ ...validRequest, category: 'OUTROS' }),
-    ).toThrow()
+    expect(() => createRequestSchema.parse({ ...validRequest, category: 'OUTROS' })).toThrow()
   })
 
   it('accepts a missing description', () => {
@@ -237,7 +240,8 @@ describe('decisionSchema', () => {
 })
 
 describe('markPaidSchema', () => {
-  const parsePaidAt = (paid_at: string) => markPaidSchema.safeParse({ paid_at, payment_reference: 'PAG-1' })
+  const parsePaidAt = (paid_at: string) =>
+    markPaidSchema.safeParse({ paid_at, payment_reference: 'PAG-1' })
 
   it('requires both date and reference', () => {
     expect(() => markPaidSchema.parse({ paid_at: '2026-09-18' })).toThrow()
@@ -249,12 +253,15 @@ describe('markPaidSchema', () => {
     expect(parsePaidAt('2024-02-29').success).toBe(true)
   })
 
-  it.each(['2026-02-31', '2026-13-01', '2025-02-29'])('rejects the calendar-invalid date %s', (paid_at) => {
-    const issue = firstIssue(parsePaidAt(paid_at))
+  it.each(['2026-02-31', '2026-13-01', '2025-02-29'])(
+    'rejects the calendar-invalid date %s',
+    (paid_at) => {
+      const issue = firstIssue(parsePaidAt(paid_at))
 
-    expect(issue.path).toEqual(['paid_at'])
-    expect(issue.message).toBe('Essa data não existe no calendário')
-  })
+      expect(issue.path).toEqual(['paid_at'])
+      expect(issue.message).toBe('Essa data não existe no calendário')
+    },
+  )
 
   it.each(['2026-09-18Tlixo', '2026-09-18T14:00:00-03:00', '18/09/2026', ''])(
     'rejects anything other than AAAA-MM-DD: %s',
@@ -269,9 +276,7 @@ describe('markPaidSchema', () => {
   )
 
   it('rejects a blank payment reference', () => {
-    expect(() =>
-      markPaidSchema.parse({ paid_at: '2026-09-18', payment_reference: '  ' }),
-    ).toThrow()
+    expect(() => markPaidSchema.parse({ paid_at: '2026-09-18', payment_reference: '  ' })).toThrow()
   })
 })
 
@@ -279,7 +284,11 @@ describe('localized error messages', () => {
   it('never leaks an English default message', () => {
     const issues = localizedIssues([
       { name: 'createRequestSchema', schema: createRequestSchema, input: {} },
-      { name: 'listRequestsQuerySchema', schema: listRequestsQuerySchema, input: { page: 'abc', status: 'BOGUS' } },
+      {
+        name: 'listRequestsQuerySchema',
+        schema: listRequestsQuerySchema,
+        input: { page: 'abc', status: 'BOGUS' },
+      },
       { name: 'decisionSchema', schema: decisionSchema, input: { decision: 'MAYBE' } },
       { name: 'markPaidSchema', schema: markPaidSchema, input: {} },
     ])

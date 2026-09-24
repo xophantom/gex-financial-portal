@@ -10,11 +10,8 @@
 // nada garante que todo BigInt venha de uma coluna com constraint de
 // positividade como amount_cents.
 export function toSafeNumber(value: bigint): number {
-  if (
-    value > BigInt(Number.MAX_SAFE_INTEGER) ||
-    value < BigInt(Number.MIN_SAFE_INTEGER)
-  ) {
-    throw new Error(`Value ${value} exceeds the safe integer range`);
+  if (value > BigInt(Number.MAX_SAFE_INTEGER) || value < BigInt(Number.MIN_SAFE_INTEGER)) {
+    throw new Error(`Value ${value} exceeds the safe integer range`)
   }
-  return Number(value);
+  return Number(value)
 }

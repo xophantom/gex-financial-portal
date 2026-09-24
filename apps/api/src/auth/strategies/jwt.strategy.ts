@@ -1,14 +1,14 @@
-import { Injectable } from '@nestjs/common';
-import { PassportStrategy } from '@nestjs/passport';
-import { ExtractJwt, Strategy } from 'passport-jwt';
-import type { UserRole } from '@gex/shared';
-import { PrismaService } from '../../infra/prisma/prisma.service';
-import type { AuthenticatedUser } from '../authenticated-user';
-import { resolveJwtSecret } from '../jwt-secrets';
+import { Injectable } from '@nestjs/common'
+import { PassportStrategy } from '@nestjs/passport'
+import { ExtractJwt, Strategy } from 'passport-jwt'
+import type { UserRole } from '@gex/shared'
+import { PrismaService } from '../../infra/prisma/prisma.service'
+import type { AuthenticatedUser } from '../authenticated-user'
+import { resolveJwtSecret } from '../jwt-secrets'
 
 interface JwtPayload {
-  sub: string;
-  role: UserRole;
+  sub: string
+  role: UserRole
 }
 
 @Injectable()
@@ -22,7 +22,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       // impede essa proteção implícita de regredir silenciosamente se o
       // secret um dia virar um objeto/chave assimétrica.
       algorithms: ['HS256'],
-    });
+    })
   }
 
   // Retornar null (em vez de lançar) deixa o AuthGuard tratar "sem usuário"
@@ -31,9 +31,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   async validate(payload: JwtPayload): Promise<AuthenticatedUser | null> {
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
-    });
-    if (!user) return null;
+    })
+    if (!user) return null
 
-    return { id: user.id, role: user.role, name: user.name, email: user.email };
+    return { id: user.id, role: user.role, name: user.name, email: user.email }
   }
 }

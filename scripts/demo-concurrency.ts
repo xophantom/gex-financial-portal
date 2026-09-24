@@ -90,7 +90,9 @@ async function main(): Promise<void> {
 
   const created = list.data.find((row) => row.invoice_number === invoice)
   if (!created) {
-    throw new Error(`could not find the request created with invoice ${invoice} in the PENDING list`)
+    throw new Error(
+      `could not find the request created with invoice ${invoice} in the PENDING list`,
+    )
   }
 
   await duplicateApproval(finance, created.id)

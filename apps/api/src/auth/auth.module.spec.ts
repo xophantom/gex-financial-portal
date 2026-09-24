@@ -1,15 +1,15 @@
-import type { Server } from 'node:http';
-import { Controller, Get, Module } from '@nestjs/common';
-import { JwtModule } from '@nestjs/jwt';
-import { Test } from '@nestjs/testing';
-import request from 'supertest';
-import { HttpExceptionFilter } from '../common/errors/http-exception.filter';
-import { PrismaModule } from '../infra/prisma/prisma.module';
-import { PrismaService } from '../infra/prisma/prisma.service';
-import { RedisModule } from '../infra/redis/redis.module';
-import { RedisService } from '../infra/redis/redis.service';
-import { AuthModule } from './auth.module';
-import { resolveJwtSecret } from './jwt-secrets';
+import type { Server } from 'node:http'
+import { Controller, Get, Module } from '@nestjs/common'
+import { JwtModule } from '@nestjs/jwt'
+import { Test } from '@nestjs/testing'
+import request from 'supertest'
+import { HttpExceptionFilter } from '../common/errors/http-exception.filter'
+import { PrismaModule } from '../infra/prisma/prisma.module'
+import { PrismaService } from '../infra/prisma/prisma.service'
+import { RedisModule } from '../infra/redis/redis.module'
+import { RedisService } from '../infra/redis/redis.service'
+import { AuthModule } from './auth.module'
+import { resolveJwtSecret } from './jwt-secrets'
 
 // Testa exatamente a mesma expressão que AuthModule usa para configurar o
 // JwtModule (`JwtModule.registerAsync({ useFactory: () => ({ secret:
@@ -20,14 +20,14 @@ import { resolveJwtSecret } from './jwt-secrets';
 // coisa — "resolver o provider JWT sem a env var falha, nomeando a
 // variável" — sem esse efeito colateral.
 describe('AuthModule JWT provider', () => {
-  const originalEnv = { ...process.env };
+  const originalEnv = { ...process.env }
 
   afterEach(() => {
-    process.env = { ...originalEnv };
-  });
+    process.env = { ...originalEnv }
+  })
 
   it('refuses to resolve the JWT provider when JWT_SECRET is missing', async () => {
-    delete process.env.JWT_SECRET;
+    delete process.env.JWT_SECRET
 
     await expect(
       Test.createTestingModule({
@@ -37,15 +37,15 @@ describe('AuthModule JWT provider', () => {
           }),
         ],
       }).compile(),
-    ).rejects.toThrow(/JWT_SECRET/);
-  });
-});
+    ).rejects.toThrow(/JWT_SECRET/)
+  })
+})
 
 @Controller('naked')
 class NakedController {
   @Get()
   ping(): { ok: true } {
-    return { ok: true };
+    return { ok: true }
   }
 }
 
@@ -57,16 +57,16 @@ class NakedModule {}
 // lembrar de pedi-la. Prisma e Redis entram substituídos por dublês, então
 // nenhuma conexão real é aberta.
 describe('AuthModule global guards (default deny)', () => {
-  const originalEnv = { ...process.env };
+  const originalEnv = { ...process.env }
 
   beforeEach(() => {
-    process.env.JWT_SECRET = 'auth-module-spec-secret';
-    process.env.JWT_REFRESH_SECRET = 'auth-module-spec-refresh-secret';
-  });
+    process.env.JWT_SECRET = 'auth-module-spec-secret'
+    process.env.JWT_REFRESH_SECRET = 'auth-module-spec-refresh-secret'
+  })
 
   afterEach(() => {
-    process.env = { ...originalEnv };
-  });
+    process.env = { ...originalEnv }
+  })
 
   const buildApp = async () => {
     const moduleRef = await Test.createTestingModule({
@@ -76,26 +76,26 @@ describe('AuthModule global guards (default deny)', () => {
       .useValue({ user: { findUnique: () => null } })
       .overrideProvider(RedisService)
       .useValue({ incrWithTtl: () => 1, delKey: () => undefined })
-      .compile();
+      .compile()
 
-    const app = moduleRef.createNestApplication();
-    app.useGlobalFilters(new HttpExceptionFilter());
-    await app.init();
-    return app;
-  };
+    const app = moduleRef.createNestApplication()
+    app.useGlobalFilters(new HttpExceptionFilter())
+    await app.init()
+    return app
+  }
 
   it('refuses an unauthenticated request to a controller with no @UseGuards', async () => {
-    const app = await buildApp();
+    const app = await buildApp()
 
     await request(app.getHttpServer() as Server)
       .get('/naked')
-      .expect(401);
+      .expect(401)
 
-    await app.close();
-  });
+    await app.close()
+  })
 
   it('still lets an unauthenticated request through a route marked @Public()', async () => {
-    const app = await buildApp();
+    const app = await buildApp()
 
     // Usuário inexistente: chega ao controller e falha em AuthService.login
     // de verdade (401 "E-mail ou senha inválidos"). As duas causas de 401 têm
@@ -104,13 +104,13 @@ describe('AuthModule global guards (default deny)', () => {
     // aconteceria se @Public() não estivesse funcionando.
     const response = await request(app.getHttpServer() as Server)
       .post('/auth/login')
-      .send({ email: 'ana@gex.test', password: 'wrong' });
+      .send({ email: 'ana@gex.test', password: 'wrong' })
 
-    expect(response.status).toBe(401);
-    expect(
-      (response.body as { error: { message: string } }).error.message,
-    ).toBe('E-mail ou senha inválidos');
+    expect(response.status).toBe(401)
+    expect((response.body as { error: { message: string } }).error.message).toBe(
+      'E-mail ou senha inválidos',
+    )
 
-    await app.close();
-  });
-});
+    await app.close()
+  })
+})

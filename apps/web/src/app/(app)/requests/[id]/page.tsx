@@ -9,11 +9,7 @@ export const metadata: Metadata = { title: 'Solicitação' }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-export default async function RequestDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>
-}) {
+export default async function RequestDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
   // Um id que nem é UUID não pode existir: 404 direto, sem ida à API.

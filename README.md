@@ -15,31 +15,31 @@ Nenhum `.env` é necessário — todo valor tem default embutido no
 `docker-compose.yml`, incluindo `APP_TODAY=2026-09-18`, a data de referência
 usada para os números abaixo.
 
-| Serviço      | URL                            |
-| ------------ | ------------------------------- |
-| Web          | http://localhost:3000           |
-| API          | http://localhost:3001           |
-| Documentação | http://localhost:3001/docs      |
-| Jaeger       | http://localhost:16686          |
+| Serviço      | URL                        |
+| ------------ | -------------------------- |
+| Web          | http://localhost:3000      |
+| API          | http://localhost:3001      |
+| Documentação | http://localhost:3001/docs |
+| Jaeger       | http://localhost:16686     |
 
 ## Usuários de seed
 
-| E-mail                       | Senha              | Perfil     | Pode                                          |
-| ----------------------------- | ------------------ | ---------- | ---------------------------------------------- |
-| `solicitante@gex.test`        | `GexRequester123!` | REQUESTER  | Criar solicitações e ver só as próprias        |
-| `outro.solicitante@gex.test`  | `GexRequester456!` | REQUESTER  | Idem — usado para provar isolamento entre solicitantes |
-| `financeiro@gex.test`         | `GexFinance123!`   | FINANCE    | Ver todas, aprovar, rejeitar e marcar como paga |
+| E-mail                       | Senha              | Perfil    | Pode                                                   |
+| ---------------------------- | ------------------ | --------- | ------------------------------------------------------ |
+| `solicitante@gex.test`       | `GexRequester123!` | REQUESTER | Criar solicitações e ver só as próprias                |
+| `outro.solicitante@gex.test` | `GexRequester456!` | REQUESTER | Idem — usado para provar isolamento entre solicitantes |
+| `financeiro@gex.test`        | `GexFinance123!`   | FINANCE   | Ver todas, aprovar, rejeitar e marcar como paga        |
 
 ## Dashboard esperado
 
 Com `APP_TODAY=2026-09-18` (o default do Compose), o perfil `FINANCE` deve ver:
 
-| Indicador              | Valor esperado |
-| ----------------------- | -------------: |
-| Total pendente          |    R$ 8.750,49 |
-| Total aprovado          |    R$ 6.585,99 |
-| Pago no mês             |    R$ 8.415,49 |
-| Solicitações vencidas   |              4 |
+| Indicador             | Valor esperado |
+| --------------------- | -------------: |
+| Total pendente        |    R$ 8.750,49 |
+| Total aprovado        |    R$ 6.585,99 |
+| Pago no mês           |    R$ 8.415,49 |
+| Solicitações vencidas |              4 |
 
 ## Como testar
 

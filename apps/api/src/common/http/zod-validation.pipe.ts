@@ -1,5 +1,5 @@
-import { Injectable, PipeTransform } from '@nestjs/common';
-import type { ZodSchema } from 'zod';
+import { Injectable, PipeTransform } from '@nestjs/common'
+import type { ZodSchema } from 'zod'
 
 @Injectable()
 export class ZodValidationPipe implements PipeTransform {
@@ -13,6 +13,6 @@ export class ZodValidationPipe implements PipeTransform {
   transform(value: unknown): unknown {
     // Deixa o ZodError subir: o filtro global já o traduz em 422 com detalhes
     // por campo, e duplicar a tradução aqui criaria dois formatos de erro.
-    return this.schema.parse(value);
+    return this.schema.parse(value)
   }
 }

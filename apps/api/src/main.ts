@@ -1,5 +1,5 @@
-import { setupTelemetry } from './infra/telemetry';
-import { withTimeout } from './common/utils/with-timeout';
+import { setupTelemetry } from './infra/telemetry'
+import { withTimeout } from './common/utils/with-timeout'
 
 // Precisa ser a primeira coisa executada, antes de qualquer import do Nest:
 // apps/api compila para CommonJS, então cada `import` vira um `require()`
@@ -11,7 +11,7 @@ import { withTimeout } from './common/utils/with-timeout';
 // dela só porque este arquivo o usa mais abaixo, ainda nesta seção — é uma
 // função utilitária isolada, sem nenhum import do Nest por trás, então
 // carregá-la aqui não atrapalha esse requisito.
-const telemetry = setupTelemetry();
+const telemetry = setupTelemetry()
 
 // Só registra os handlers de sinal quando a telemetria está realmente
 // ativa. Duas razões para não registrar sempre:
@@ -29,37 +29,30 @@ const telemetry = setupTelemetry();
 //    termina).
 if (telemetry) {
   const shutdown = (signal: NodeJS.Signals) => {
-    void withTimeout(
-      telemetry.shutdown(),
-      3_000,
-      'telemetry shutdown timed out',
-    )
+    void withTimeout(telemetry.shutdown(), 3_000, 'telemetry shutdown timed out')
       .catch((error: unknown) => {
         // Ainda não há logger do Nest disponível aqui (o app pode nem
         // existir mais, ou nunca ter chegado a existir).
-        console.error(
-          `[telemetry] shutdown on ${signal} did not finish cleanly:`,
-          error,
-        );
+        console.error(`[telemetry] shutdown on ${signal} did not finish cleanly:`, error)
       })
-      .finally(() => process.exit(0));
-  };
+      .finally(() => process.exit(0))
+  }
 
-  process.once('SIGTERM', () => shutdown('SIGTERM'));
-  process.once('SIGINT', () => shutdown('SIGINT'));
+  process.once('SIGTERM', () => shutdown('SIGTERM'))
+  process.once('SIGINT', () => shutdown('SIGINT'))
 }
 
-import { NestFactory } from '@nestjs/core';
-import { Logger } from 'nestjs-pino';
-import { AppModule } from './app.module';
-import { configureApp } from './configure-app';
+import { NestFactory } from '@nestjs/core'
+import { Logger } from 'nestjs-pino'
+import { AppModule } from './app.module'
+import { configureApp } from './configure-app'
 
 async function bootstrap() {
   // bufferLogs represa os logs do próprio boot do Nest até o pino assumir,
   // em vez de perdê-los para o ConsoleLogger padrão.
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
-  app.useLogger(app.get(Logger));
-  configureApp(app);
-  await app.listen(process.env.API_PORT ?? 3001);
+  const app = await NestFactory.create(AppModule, { bufferLogs: true })
+  app.useLogger(app.get(Logger))
+  configureApp(app)
+  await app.listen(process.env.API_PORT ?? 3001)
 }
-void bootstrap();
+void bootstrap()

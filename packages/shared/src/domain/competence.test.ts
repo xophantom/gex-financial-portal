@@ -17,12 +17,9 @@ describe('parseCompetenceInput', () => {
     },
   )
 
-  it.each(['9/2026', '09/26', '2026/09', '', 'setembro'])(
-    'rejects malformed input %s',
-    (input) => {
-      expect(() => parseCompetenceInput(input)).toThrow()
-    },
-  )
+  it.each(['9/2026', '09/26', '2026/09', '', 'setembro'])('rejects malformed input %s', (input) => {
+    expect(() => parseCompetenceInput(input)).toThrow()
+  })
 
   it('trims leading and trailing whitespace', () => {
     expect(parseCompetenceInput(' 09/2026 ')).toBe('2026-09')
@@ -50,10 +47,7 @@ describe('formatCompetence', () => {
     expect(parseCompetenceInput(formatCompetence('2026-01'))).toBe('2026-01')
   })
 
-  it.each(['13/2026', '2026-13', ''])(
-    'throws for invalid stored format %s',
-    (input) => {
-      expect(() => formatCompetence(input)).toThrow()
-    },
-  )
+  it.each(['13/2026', '2026-13', ''])('throws for invalid stored format %s', (input) => {
+    expect(() => formatCompetence(input)).toThrow()
+  })
 })

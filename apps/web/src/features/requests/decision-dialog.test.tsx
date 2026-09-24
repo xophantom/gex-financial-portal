@@ -12,13 +12,17 @@ describe('DecisionDialog', () => {
     )
     expect(screen.queryByLabelText(/motivo/i)).not.toBeInTheDocument()
 
-    rerender(<DecisionDialog requestId="r1" decision="REJECT" onClose={vi.fn()} onSuccess={vi.fn()} />)
+    rerender(
+      <DecisionDialog requestId="r1" decision="REJECT" onClose={vi.fn()} onSuccess={vi.fn()} />,
+    )
     expect(screen.getByLabelText(/motivo/i)).toBeInTheDocument()
   })
 
   it('keeps the dialog open and shows an error when confirming a rejection without a reason', async () => {
     const onSuccess = vi.fn()
-    render(<DecisionDialog requestId="r1" decision="REJECT" onClose={vi.fn()} onSuccess={onSuccess} />)
+    render(
+      <DecisionDialog requestId="r1" decision="REJECT" onClose={vi.fn()} onSuccess={onSuccess} />,
+    )
 
     await userEvent.click(screen.getByRole('button', { name: /confirmar/i }))
 
@@ -32,7 +36,9 @@ describe('DecisionDialog', () => {
     let resolve!: (value: Response) => void
     vi.mocked(fetch).mockReturnValue(new Promise<Response>((r) => (resolve = r)))
 
-    render(<DecisionDialog requestId="r1" decision="APPROVE" onClose={vi.fn()} onSuccess={vi.fn()} />)
+    render(
+      <DecisionDialog requestId="r1" decision="APPROVE" onClose={vi.fn()} onSuccess={vi.fn()} />,
+    )
     const button = screen.getByRole('button', { name: /confirmar/i })
     await userEvent.click(button)
 
@@ -43,7 +49,9 @@ describe('DecisionDialog', () => {
   it('submits only once on a double click', async () => {
     vi.mocked(fetch).mockReturnValue(new Promise<Response>(() => {}))
 
-    render(<DecisionDialog requestId="r1" decision="APPROVE" onClose={vi.fn()} onSuccess={vi.fn()} />)
+    render(
+      <DecisionDialog requestId="r1" decision="APPROVE" onClose={vi.fn()} onSuccess={vi.fn()} />,
+    )
     await userEvent.dblClick(screen.getByRole('button', { name: /confirmar/i }))
 
     expect(fetch).toHaveBeenCalledTimes(1)
@@ -53,7 +61,9 @@ describe('DecisionDialog', () => {
     vi.mocked(fetch).mockRejectedValue(new TypeError('Failed to fetch'))
     const onSuccess = vi.fn()
 
-    render(<DecisionDialog requestId="r1" decision="APPROVE" onClose={vi.fn()} onSuccess={onSuccess} />)
+    render(
+      <DecisionDialog requestId="r1" decision="APPROVE" onClose={vi.fn()} onSuccess={onSuccess} />,
+    )
     await userEvent.click(screen.getByRole('button', { name: /confirmar/i }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/não foi possível/i)
@@ -62,7 +72,9 @@ describe('DecisionDialog', () => {
   })
 
   it('is labelled by its title', () => {
-    render(<DecisionDialog requestId="r1" decision="REJECT" onClose={vi.fn()} onSuccess={vi.fn()} />)
+    render(
+      <DecisionDialog requestId="r1" decision="REJECT" onClose={vi.fn()} onSuccess={vi.fn()} />,
+    )
     expect(screen.getByRole('dialog', { name: 'Rejeitar solicitação' })).toBeInTheDocument()
   })
 
@@ -70,7 +82,9 @@ describe('DecisionDialog', () => {
     vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({}) } as Response)
     const onSuccess = vi.fn()
 
-    render(<DecisionDialog requestId="r1" decision="APPROVE" onClose={vi.fn()} onSuccess={onSuccess} />)
+    render(
+      <DecisionDialog requestId="r1" decision="APPROVE" onClose={vi.fn()} onSuccess={onSuccess} />,
+    )
     await userEvent.click(screen.getByRole('button', { name: /confirmar/i }))
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalled())

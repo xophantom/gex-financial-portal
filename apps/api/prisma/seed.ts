@@ -1,54 +1,53 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { PrismaClient, RequestStatus, UserRole } from '@prisma/client';
-import argon2 from 'argon2';
-import { toPrismaCategory } from '../src/requests/request-category.mapper';
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { PrismaClient, RequestStatus, UserRole } from '@prisma/client'
+import argon2 from 'argon2'
+import { toPrismaCategory } from '../src/requests/request-category.mapper'
 
 // Roda sempre a partir do fonte (tsx em dev e no container, ts-jest nos
 // testes), nunca compilado: o caminho até data/ na raiz do monorepo é fixo.
-const DATA = join(__dirname, '..', '..', '..', 'data');
+const DATA = join(__dirname, '..', '..', '..', 'data')
 
 // Formato dos arquivos em data/, como vêm do enunciado (snake_case, datas em
 // string, categoria com acento).
 export interface SeedUser {
-  id: string;
-  name: string;
-  email: string;
-  role: UserRole;
-  seed_password: string;
+  id: string
+  name: string
+  email: string
+  role: UserRole
+  seed_password: string
 }
 
 export interface SeedRequest {
-  id: string;
-  requester_id: string;
-  supplier_name: string;
-  supplier_cnpj: string;
-  invoice_number: string;
-  amount_cents: number;
-  competence: string;
-  due_date: string;
-  category: string;
-  description: string | null;
-  status: RequestStatus;
-  rejection_reason: string | null;
-  paid_at: string | null;
-  payment_reference: string | null;
-  created_at: string;
-  updated_at: string;
+  id: string
+  requester_id: string
+  supplier_name: string
+  supplier_cnpj: string
+  invoice_number: string
+  amount_cents: number
+  competence: string
+  due_date: string
+  category: string
+  description: string | null
+  status: RequestStatus
+  rejection_reason: string | null
+  paid_at: string | null
+  payment_reference: string | null
+  created_at: string
+  updated_at: string
 }
 
 export interface SeedAuditEvent {
-  id: string;
-  request_id: string;
-  actor_id: string;
-  previous_status: RequestStatus | null;
-  new_status: RequestStatus;
-  reason: string | null;
-  created_at: string;
+  id: string
+  request_id: string
+  actor_id: string
+  previous_status: RequestStatus | null
+  new_status: RequestStatus
+  reason: string | null
+  created_at: string
 }
 
-const read = <T>(file: string): T[] =>
-  JSON.parse(readFileSync(join(DATA, file), 'utf8')) as T[];
+const read = <T>(file: string): T[] => JSON.parse(readFileSync(join(DATA, file), 'utf8')) as T[]
 
 // Roda a cada boot do container, então só cria o que falta: sobrescrever
 // linhas existentes desfaria transições feitas pela aplicação e deixaria os
@@ -56,11 +55,11 @@ const read = <T>(file: string): T[] =>
 export async function seed(prisma: PrismaClient): Promise<void> {
   const existingUsers = new Set(
     (await prisma.user.findMany({ select: { id: true } })).map(({ id }) => id),
-  );
+  )
 
   for (const user of read<SeedUser>('seed_users.json')) {
     // argon2 é caro de propósito: só calcula para quem ainda não existe.
-    if (existingUsers.has(user.id)) continue;
+    if (existingUsers.has(user.id)) continue
 
     await prisma.user.create({
       data: {
@@ -72,7 +71,7 @@ export async function seed(prisma: PrismaClient): Promise<void> {
           type: argon2.argon2id,
         }),
       },
-    });
+    })
   }
 
   await prisma.request.createMany({
@@ -95,7 +94,7 @@ export async function seed(prisma: PrismaClient): Promise<void> {
       updatedAt: new Date(row.updated_at),
     })),
     skipDuplicates: true,
-  });
+  })
 
   await prisma.requestStatusEvent.createMany({
     data: read<SeedAuditEvent>('seed_audit_events.json').map((event) => ({
@@ -108,16 +107,16 @@ export async function seed(prisma: PrismaClient): Promise<void> {
       createdAt: new Date(event.created_at),
     })),
     skipDuplicates: true,
-  });
+  })
 }
 
 if (require.main === module) {
-  const prisma = new PrismaClient();
+  const prisma = new PrismaClient()
   seed(prisma)
     .then(() => prisma.$disconnect())
     .catch(async (error) => {
-      console.error(error);
-      await prisma.$disconnect();
-      process.exit(1);
-    });
+      console.error(error)
+      await prisma.$disconnect()
+      process.exit(1)
+    })
 }

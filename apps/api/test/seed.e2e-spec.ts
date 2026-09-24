@@ -1,166 +1,138 @@
-import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { PrismaClient } from '@prisma/client';
-import argon2 from 'argon2';
-import {
-  seed,
-  type SeedAuditEvent,
-  type SeedRequest,
-  type SeedUser,
-} from '../prisma/seed';
-import { startTestDatabase, stopTestDatabase } from './support/containers';
+import { randomUUID } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { PrismaClient } from '@prisma/client'
+import argon2 from 'argon2'
+import { seed, type SeedAuditEvent, type SeedRequest, type SeedUser } from '../prisma/seed'
+import { startTestDatabase, stopTestDatabase } from './support/containers'
 
-const DATA = join(__dirname, '../../../data');
+const DATA = join(__dirname, '../../../data')
 
 // A fronteira com o disco é o único lugar não confiável: um `as T[]` aqui,
 // e o resto do arquivo trabalha com campos de verdade (string, number, null),
 // não com `any` se propagando por toda comparação de asserção.
-const read = <T>(file: string): T[] =>
-  JSON.parse(readFileSync(join(DATA, file), 'utf8')) as T[];
+const read = <T>(file: string): T[] => JSON.parse(readFileSync(join(DATA, file), 'utf8')) as T[]
 
-const isoOrNull = (value: string | null) =>
-  value ? new Date(value).toISOString() : null;
+const isoOrNull = (value: string | null) => (value ? new Date(value).toISOString() : null)
 
-let prisma: PrismaClient;
+let prisma: PrismaClient
 
 beforeAll(async () => {
-  const url = await startTestDatabase();
-  prisma = new PrismaClient({ datasources: { db: { url } } });
-  await seed(prisma);
-}, 180_000);
+  const url = await startTestDatabase()
+  prisma = new PrismaClient({ datasources: { db: { url } } })
+  await seed(prisma)
+}, 180_000)
 
 afterAll(async () => {
-  await prisma?.$disconnect();
-  await stopTestDatabase();
-});
+  await prisma?.$disconnect()
+  await stopTestDatabase()
+})
 
 describe('seed', () => {
   it('loads every user, request and audit event', async () => {
-    expect(await prisma.user.count()).toBe(
-      read<SeedUser>('seed_users.json').length,
-    );
-    expect(await prisma.request.count()).toBe(
-      read<SeedRequest>('seed_requests.json').length,
-    );
+    expect(await prisma.user.count()).toBe(read<SeedUser>('seed_users.json').length)
+    expect(await prisma.request.count()).toBe(read<SeedRequest>('seed_requests.json').length)
     expect(await prisma.requestStatusEvent.count()).toBe(
       read<SeedAuditEvent>('seed_audit_events.json').length,
-    );
-  });
+    )
+  })
 
   it('stores every request field exactly as provided', async () => {
     // Coluna crua, não fromPrismaCategory(): comparar com o próprio
     // mapeamento que o seed usa não pegaria uma troca de categorias. O
     // mapper tem teste unitário próprio (request-category.mapper.spec.ts).
-    const rawCategories = await prisma.$queryRaw<
-      Array<{ id: string; category: string }>
-    >`
+    const rawCategories = await prisma.$queryRaw<Array<{ id: string; category: string }>>`
       SELECT id, category::text AS category FROM requests
-    `;
-    const rawCategoryById = new Map(
-      rawCategories.map((row) => [row.id, row.category]),
-    );
+    `
+    const rawCategoryById = new Map(rawCategories.map((row) => [row.id, row.category]))
 
     for (const row of read<SeedRequest>('seed_requests.json')) {
       const stored = await prisma.request.findUniqueOrThrow({
         where: { id: row.id },
-      });
+      })
 
-      expect(stored.requesterId).toBe(row.requester_id);
-      expect(stored.supplierName).toBe(row.supplier_name);
-      expect(stored.supplierCnpj).toBe(row.supplier_cnpj);
-      expect(stored.invoiceNumber).toBe(row.invoice_number);
-      expect(Number(stored.amountCents)).toBe(row.amount_cents);
-      expect(stored.competence).toBe(row.competence);
-      expect(stored.dueDate.toISOString().slice(0, 10)).toBe(row.due_date);
-      expect(rawCategoryById.get(row.id)).toBe(row.category);
-      expect(stored.description).toBe(row.description);
-      expect(stored.status).toBe(row.status);
-      expect(stored.rejectionReason).toBe(row.rejection_reason);
-      expect(stored.paidAt?.toISOString() ?? null).toBe(isoOrNull(row.paid_at));
-      expect(stored.paymentReference).toBe(row.payment_reference);
-      expect(stored.createdAt.toISOString()).toBe(
-        new Date(row.created_at).toISOString(),
-      );
-      expect(stored.updatedAt.toISOString()).toBe(
-        new Date(row.updated_at).toISOString(),
-      );
+      expect(stored.requesterId).toBe(row.requester_id)
+      expect(stored.supplierName).toBe(row.supplier_name)
+      expect(stored.supplierCnpj).toBe(row.supplier_cnpj)
+      expect(stored.invoiceNumber).toBe(row.invoice_number)
+      expect(Number(stored.amountCents)).toBe(row.amount_cents)
+      expect(stored.competence).toBe(row.competence)
+      expect(stored.dueDate.toISOString().slice(0, 10)).toBe(row.due_date)
+      expect(rawCategoryById.get(row.id)).toBe(row.category)
+      expect(stored.description).toBe(row.description)
+      expect(stored.status).toBe(row.status)
+      expect(stored.rejectionReason).toBe(row.rejection_reason)
+      expect(stored.paidAt?.toISOString() ?? null).toBe(isoOrNull(row.paid_at))
+      expect(stored.paymentReference).toBe(row.payment_reference)
+      expect(stored.createdAt.toISOString()).toBe(new Date(row.created_at).toISOString())
+      expect(stored.updatedAt.toISOString()).toBe(new Date(row.updated_at).toISOString())
     }
-  });
+  })
 
   it('stores every audit event field exactly as provided', async () => {
     for (const event of read<SeedAuditEvent>('seed_audit_events.json')) {
       const stored = await prisma.requestStatusEvent.findUniqueOrThrow({
         where: { id: event.id },
-      });
+      })
 
-      expect(stored.requestId).toBe(event.request_id);
-      expect(stored.actorId).toBe(event.actor_id);
-      expect(stored.previousStatus).toBe(event.previous_status);
-      expect(stored.newStatus).toBe(event.new_status);
-      expect(stored.reason).toBe(event.reason);
-      expect(stored.createdAt.toISOString()).toBe(
-        new Date(event.created_at).toISOString(),
-      );
+      expect(stored.requestId).toBe(event.request_id)
+      expect(stored.actorId).toBe(event.actor_id)
+      expect(stored.previousStatus).toBe(event.previous_status)
+      expect(stored.newStatus).toBe(event.new_status)
+      expect(stored.reason).toBe(event.reason)
+      expect(stored.createdAt.toISOString()).toBe(new Date(event.created_at).toISOString())
     }
-  });
+  })
 
   it('ends every audit chain at the request current status', () => {
-    const events = read<SeedAuditEvent>('seed_audit_events.json');
-    const requests = read<SeedRequest>('seed_requests.json');
+    const events = read<SeedAuditEvent>('seed_audit_events.json')
+    const requests = read<SeedRequest>('seed_requests.json')
 
     for (const request of requests) {
       const chain = events
         .filter((event) => event.request_id === request.id)
-        .sort(
-          (a, b) =>
-            new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-        );
+        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
 
-      expect(chain.length).toBeGreaterThan(0);
-      expect(chain[chain.length - 1].new_status).toBe(request.status);
+      expect(chain.length).toBeGreaterThan(0)
+      expect(chain[chain.length - 1].new_status).toBe(request.status)
     }
-  });
+  })
 
   it('hashes seed passwords instead of storing them', async () => {
     for (const user of read<SeedUser>('seed_users.json')) {
       const stored = await prisma.user.findUniqueOrThrow({
         where: { id: user.id },
-      });
+      })
 
-      expect(stored.passwordHash).not.toContain(user.seed_password);
-      expect(await argon2.verify(stored.passwordHash, user.seed_password)).toBe(
-        true,
-      );
+      expect(stored.passwordHash).not.toContain(user.seed_password)
+      expect(await argon2.verify(stored.passwordHash, user.seed_password)).toBe(true)
       // verify() aceita qualquer variante; o prefixo prende argon2id.
-      expect(stored.passwordHash.startsWith('$argon2id$')).toBe(true);
+      expect(stored.passwordHash.startsWith('$argon2id$')).toBe(true)
     }
-  });
+  })
 
   it('is idempotent: running twice changes nothing', async () => {
-    await seed(prisma);
+    await seed(prisma)
 
-    expect(await prisma.request.count()).toBe(
-      read<SeedRequest>('seed_requests.json').length,
-    );
+    expect(await prisma.request.count()).toBe(read<SeedRequest>('seed_requests.json').length)
     expect(await prisma.requestStatusEvent.count()).toBe(
       read<SeedAuditEvent>('seed_audit_events.json').length,
-    );
-  });
+    )
+  })
 
   // O seed roda a cada boot do container: não pode desfazer o que a aplicação
   // gravou nem deixar a auditoria incoerente com o status.
   it('preserves changes made after the first run', async () => {
-    const target = '20000000-0000-4000-8000-000000000001';
-    const financeId = '10000000-0000-4000-8000-000000000003';
+    const target = '20000000-0000-4000-8000-000000000001'
+    const financeId = '10000000-0000-4000-8000-000000000003'
     const user = await prisma.user.findUniqueOrThrow({
       where: { id: financeId },
-    });
+    })
 
     await prisma.request.update({
       where: { id: target },
       data: { status: 'APPROVED' },
-    });
+    })
     await prisma.requestStatusEvent.create({
       data: {
         id: randomUUID(),
@@ -169,29 +141,28 @@ describe('seed', () => {
         previousStatus: 'PENDING',
         newStatus: 'APPROVED',
       },
-    });
+    })
 
-    await seed(prisma);
+    await seed(prisma)
 
     const stored = await prisma.request.findUniqueOrThrow({
       where: { id: target },
       include: { events: { orderBy: { createdAt: 'desc' } } },
-    });
-    expect(stored.status).toBe('APPROVED');
-    expect(stored.events[0].newStatus).toBe('APPROVED');
+    })
+    expect(stored.status).toBe('APPROVED')
+    expect(stored.events[0].newStatus).toBe('APPROVED')
     // Sem recalcular argon2 para quem já existe.
-    expect(
-      (await prisma.user.findUniqueOrThrow({ where: { id: financeId } }))
-        .passwordHash,
-    ).toBe(user.passwordHash);
-  });
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: financeId } })).passwordHash).toBe(
+      user.passwordHash,
+    )
+  })
 
   it('keeps paid_at distinct from created_at', async () => {
-    const paid = await prisma.request.findMany({ where: { status: 'PAID' } });
+    const paid = await prisma.request.findMany({ where: { status: 'PAID' } })
 
-    expect(paid).toHaveLength(5);
+    expect(paid).toHaveLength(5)
     for (const request of paid) {
-      expect(request.paidAt?.getTime()).not.toBe(request.createdAt.getTime());
+      expect(request.paidAt?.getTime()).not.toBe(request.createdAt.getTime())
     }
-  });
-});
+  })
+})

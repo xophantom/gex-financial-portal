@@ -4,12 +4,7 @@ import { parseCompetenceInput } from '../domain/competence.js'
 import { REQUEST_STATUSES } from '../domain/status.js'
 import { isCalendarDate } from '../domain/date.js'
 
-export const REQUEST_CATEGORIES = [
-  'SOFTWARE',
-  'SERVIÇOS',
-  'MARKETING',
-  'INFRAESTRUTURA',
-] as const
+export const REQUEST_CATEGORIES = ['SOFTWARE', 'SERVIÇOS', 'MARKETING', 'INFRAESTRUTURA'] as const
 export type RequestCategory = (typeof REQUEST_CATEGORIES)[number]
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -21,8 +16,13 @@ const isoDateField = (requiredMessage: string) =>
   z
     .string({ required_error: requiredMessage, invalid_type_error: requiredMessage })
     .regex(ISO_DATE, 'Use o formato AAAA-MM-DD')
-    .refine((value) => !ISO_DATE.test(value) || isCalendarDate(value), 'Essa data não existe no calendário')
-    .describe('Data no formato AAAA-MM-DD; precisa ser uma data real do calendário (ex.: 30/02 é rejeitado)')
+    .refine(
+      (value) => !ISO_DATE.test(value) || isCalendarDate(value),
+      'Essa data não existe no calendário',
+    )
+    .describe(
+      'Data no formato AAAA-MM-DD; precisa ser uma data real do calendário (ex.: 30/02 é rejeitado)',
+    )
 
 const isoDate = isoDateField('Informe a data')
 
@@ -45,7 +45,9 @@ export const createRequestSchema = z.object({
     .string({ required_error: 'Informe o CNPJ', invalid_type_error: 'Informe o CNPJ' })
     .refine(isValidCnpj, 'CNPJ inválido')
     .transform(normalizeCnpj)
-    .describe('CNPJ do fornecedor, com ou sem máscara; os dígitos verificadores são validados no backend'),
+    .describe(
+      'CNPJ do fornecedor, com ou sem máscara; os dígitos verificadores são validados no backend',
+    ),
   // Caixa e espaços normalizados para que "nf-1" e "NF-1" colidam no índice
   // único (CNPJ, nota) em vez de virarem duas notas.
   invoice_number: z
@@ -64,7 +66,10 @@ export const createRequestSchema = z.object({
     .positive('O valor deve ser maior que zero')
     .max(100_000_000_000, 'O valor não pode passar de R$ 1.000.000.000,00'),
   competence: z
-    .string({ required_error: 'Informe a competência', invalid_type_error: 'Informe a competência' })
+    .string({
+      required_error: 'Informe a competência',
+      invalid_type_error: 'Informe a competência',
+    })
     .superRefine((value, ctx) => {
       try {
         parseCompetenceInput(value)
@@ -76,7 +81,11 @@ export const createRequestSchema = z.object({
     .describe('Competência no formato MM/AAAA (ex.: 03/2026) ou AAAA-MM'),
   due_date: isoDate,
   category: z.enum(REQUEST_CATEGORIES, { message: 'Categoria inválida' }),
-  description: z.string().trim().max(1000, 'A descrição não pode passar de 1000 caracteres').optional(),
+  description: z
+    .string()
+    .trim()
+    .max(1000, 'A descrição não pode passar de 1000 caracteres')
+    .optional(),
 })
 
 export const listRequestsQuerySchema = z
@@ -89,10 +98,10 @@ export const listRequestsQuerySchema = z
     due_from: isoDate.optional().describe(isoDate.description ?? ''),
     due_to: isoDate.optional().describe(isoDate.description ?? ''),
   })
-  .refine(
-    (query) => !query.due_from || !query.due_to || query.due_from <= query.due_to,
-    { message: 'O início do período não pode ser posterior ao fim', path: ['due_from'] },
-  )
+  .refine((query) => !query.due_from || !query.due_to || query.due_from <= query.due_to, {
+    message: 'O início do período não pode ser posterior ao fim',
+    path: ['due_from'],
+  })
   // Regras entre campos não aparecem no JSON Schema; a descrição as documenta.
   .describe('due_from não pode ser posterior a due_to, quando os dois forem informados')
 

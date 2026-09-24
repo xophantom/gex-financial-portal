@@ -11,7 +11,8 @@ vi.mock('next/headers', () => ({
     get: (name: string) => (cookieStore.has(name) ? { value: cookieStore.get(name)! } : undefined),
     set: (name: string, value: string) => {
       // Mesmo comportamento do Next em Server Components: cookies somente leitura.
-      if (!cookies.writable) throw new Error('Cookies can only be modified in a Server Action or Route Handler')
+      if (!cookies.writable)
+        throw new Error('Cookies can only be modified in a Server Action or Route Handler')
       cookieStore.set(name, value)
     },
     delete: (name: string) => cookieStore.delete(name),

@@ -14,7 +14,10 @@ export const loginSchema = z.object({
 
 export const refreshSchema = z.object({
   refresh_token: z
-    .string({ required_error: 'Informe o refresh token', invalid_type_error: 'Informe o refresh token' })
+    .string({
+      required_error: 'Informe o refresh token',
+      invalid_type_error: 'Informe o refresh token',
+    })
     .min(1, 'Informe o refresh token'),
 })
 

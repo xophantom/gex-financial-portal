@@ -1,5 +1,6 @@
 // Helpers dos testes de schema; fora do build e da cobertura.
-export const ENGLISH_DEFAULT = /Required|Invalid enum value|Expected .* received|String must contain/
+export const ENGLISH_DEFAULT =
+  /Required|Invalid enum value|Expected .* received|String must contain/
 
 interface ParseResult {
   success: boolean

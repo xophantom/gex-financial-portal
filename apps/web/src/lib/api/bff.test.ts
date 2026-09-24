@@ -16,7 +16,10 @@ function jsonRequest(body: string) {
 
 describe('parseBody', () => {
   it('returns the parsed data when the body matches the schema', async () => {
-    const result = await parseBody(jsonRequest(JSON.stringify({ decision: 'REJECT', reason: '  duplicada ' })), schema)
+    const result = await parseBody(
+      jsonRequest(JSON.stringify({ decision: 'REJECT', reason: '  duplicada ' })),
+      schema,
+    )
 
     expect(result).toEqual({ ok: true, data: { decision: 'REJECT', reason: 'duplicada' } })
   })

@@ -133,7 +133,10 @@ describe('RequestForm', () => {
       ok: false,
       status: 409,
       json: async () => ({
-        error: { code: 'DUPLICATE_INVOICE', message: 'Já existe uma solicitação com este CNPJ e número de nota' },
+        error: {
+          code: 'DUPLICATE_INVOICE',
+          message: 'Já existe uma solicitação com este CNPJ e número de nota',
+        },
       }),
     } as Response)
 

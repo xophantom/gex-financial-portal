@@ -18,7 +18,8 @@ export function StatusTimeline({ events }: { events: StatusEventResponse[] }) {
               : statusLabel(event.new_status)}
           </p>
           <p className="text-zinc-600 dark:text-zinc-400">
-            <time dateTime={event.created_at}>{formatDateTime(event.created_at)}</time> · {event.actor.name}
+            <time dateTime={event.created_at}>{formatDateTime(event.created_at)}</time> ·{' '}
+            {event.actor.name}
           </p>
           {event.reason && <p className="text-zinc-600 dark:text-zinc-400">{event.reason}</p>}
         </li>

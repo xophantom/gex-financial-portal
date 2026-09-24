@@ -1,5 +1,5 @@
-import pino from 'pino';
-import { correlationStore } from '../http/correlation.middleware';
+import pino from 'pino'
+import { correlationStore } from '../http/correlation.middleware'
 
 export const redactionOptions = {
   paths: [
@@ -23,7 +23,7 @@ export const redactionOptions = {
     'req.body.amount_cents',
   ],
   censor: '[REDACTED]',
-};
+}
 
 export function buildLogger(destination?: pino.DestinationStream): pino.Logger {
   return pino(
@@ -38,5 +38,5 @@ export function buildLogger(destination?: pino.DestinationStream): pino.Logger {
       }),
     },
     destination,
-  );
+  )
 }

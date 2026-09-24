@@ -33,7 +33,10 @@ export function DialogOverlay({ children, onClose }: { children: ReactNode; onCl
         onClick={onClose}
         className="absolute inset-0 cursor-default"
       />
-      <div ref={panelRef} className="relative z-10 w-full max-w-md rounded-lg bg-white p-4 shadow-xl dark:bg-zinc-900">
+      <div
+        ref={panelRef}
+        className="relative z-10 w-full max-w-md rounded-lg bg-white p-4 shadow-xl dark:bg-zinc-900"
+      >
         {children}
       </div>
     </div>

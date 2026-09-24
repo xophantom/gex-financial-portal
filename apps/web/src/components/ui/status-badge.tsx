@@ -11,7 +11,8 @@ const STATUS_TONE: Record<RequestStatus, string> = {
   PAID: 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
 }
 
-const UNKNOWN_TONE = 'border-zinc-300 bg-zinc-50 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300'
+const UNKNOWN_TONE =
+  'border-zinc-300 bg-zinc-50 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300'
 
 export function StatusBadge({ status }: { status: RequestStatus }) {
   return (

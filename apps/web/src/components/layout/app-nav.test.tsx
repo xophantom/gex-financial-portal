@@ -42,7 +42,10 @@ describe('AppNav', () => {
 
   it('offers "Nova solicitação" only to the requester', () => {
     const { unmount } = render(<AppNav user={requester} />)
-    expect(screen.getByRole('link', { name: 'Nova solicitação' })).toHaveAttribute('href', '/requests/new')
+    expect(screen.getByRole('link', { name: 'Nova solicitação' })).toHaveAttribute(
+      'href',
+      '/requests/new',
+    )
     unmount()
 
     render(<AppNav user={finance} />)
@@ -54,7 +57,10 @@ describe('AppNav', () => {
     pathname.current = '/requests/new'
     render(<AppNav user={requester} />)
 
-    expect(screen.getByRole('link', { name: 'Nova solicitação' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: 'Nova solicitação' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
     expect(screen.getByRole('link', { name: 'Solicitações' })).not.toHaveAttribute('aria-current')
   })
 
@@ -62,7 +68,10 @@ describe('AppNav', () => {
     pathname.current = '/requests/10000000-0000-4000-8000-000000000001'
     render(<AppNav user={finance} />)
 
-    expect(screen.getByRole('link', { name: 'Solicitações' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: 'Solicitações' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
     expect(screen.getByRole('link', { name: 'Dashboard' })).not.toHaveAttribute('aria-current')
   })
 

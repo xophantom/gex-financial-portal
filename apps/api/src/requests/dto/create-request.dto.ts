@@ -1,5 +1,5 @@
-import { createRequestSchema } from '@gex/shared';
-import { createZodDto } from 'nestjs-zod';
+import { createRequestSchema } from '@gex/shared'
+import { createZodDto } from 'nestjs-zod'
 
 // createZodDto só embrulha o schema Zod que já valida a entrada (via
 // ZodValidationPipe, no controller) para dar ao Nest/Swagger uma classe real

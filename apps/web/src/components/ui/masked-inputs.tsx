@@ -39,7 +39,13 @@ export function MoneyInput({ value, onChange, ...rest }: MoneyInputProps) {
   }
 
   return (
-    <input {...rest} inputMode="numeric" value={display} onChange={handleChange} onPaste={handlePaste} />
+    <input
+      {...rest}
+      inputMode="numeric"
+      value={display}
+      onChange={handleChange}
+      onPaste={handlePaste}
+    />
   )
 }
 

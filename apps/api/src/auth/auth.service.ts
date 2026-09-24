@@ -1,30 +1,30 @@
-import { Injectable } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import argon2 from 'argon2';
-import type { AuthResponse, SessionUser } from '@gex/shared';
-import { AppException } from '../common/errors/app.exception';
-import { PrismaService } from '../infra/prisma/prisma.service';
-import { RedisService } from '../infra/redis/redis.service';
-import { resolveJwtRefreshSecret } from './jwt-secrets';
+import { Injectable } from '@nestjs/common'
+import { JwtService } from '@nestjs/jwt'
+import argon2 from 'argon2'
+import type { AuthResponse, SessionUser } from '@gex/shared'
+import { AppException } from '../common/errors/app.exception'
+import { PrismaService } from '../infra/prisma/prisma.service'
+import { RedisService } from '../infra/redis/redis.service'
+import { resolveJwtRefreshSecret } from './jwt-secrets'
 
-const MAX_ATTEMPTS_PER_EMAIL = 10;
-const EMAIL_WINDOW_SECONDS = 300;
+const MAX_ATTEMPTS_PER_EMAIL = 10
+const EMAIL_WINDOW_SECONDS = 300
 // Mais alto que o limite por e-mail: cobre um IP tentando muitas contas
 // diferentes, poucas vezes cada uma.
-const MAX_ATTEMPTS_PER_IP = 30;
-const IP_WINDOW_SECONDS = 300;
+const MAX_ATTEMPTS_PER_IP = 30
+const IP_WINDOW_SECONDS = 300
 
 // Hash argon2id fixo verificado quando o e-mail não existe, só para pagar o
 // mesmo custo de CPU de um usuário real: sem ele, o tempo de resposta
 // revelaria quais e-mails têm conta. O resultado é sempre descartado.
 const DUMMY_PASSWORD_HASH =
-  '$argon2id$v=19$m=65536,t=3,p=4$NZgu8zFbSVZkqFpSgF0NmA$Is1czcXXrf+qFEl+t5LRNtEALabV2KLfgdtbg6nomzc';
+  '$argon2id$v=19$m=65536,t=3,p=4$NZgu8zFbSVZkqFpSgF0NmA$Is1czcXXrf+qFEl+t5LRNtEALabV2KLfgdtbg6nomzc'
 
 @Injectable()
 export class AuthService {
   // Resolvido na construção para falhar no boot sem JWT_REFRESH_SECRET; com
   // `secret: undefined` o @nestjs/jwt usaria JWT_SECRET para os dois tokens.
-  private readonly refreshSecret = resolveJwtRefreshSecret();
+  private readonly refreshSecret = resolveJwtRefreshSecret()
 
   constructor(
     private readonly prisma: PrismaService,
@@ -33,26 +33,18 @@ export class AuthService {
   ) {}
 
   // O e-mail chega normalizado (minúsculas) pelo loginSchema.
-  async login(
-    email: string,
-    password: string,
-    ip: string,
-  ): Promise<AuthResponse> {
-    const emailKey = `login:email:${email}`;
-    await this.enforceLimit(
-      emailKey,
-      MAX_ATTEMPTS_PER_EMAIL,
-      EMAIL_WINDOW_SECONDS,
-    );
+  async login(email: string, password: string, ip: string): Promise<AuthResponse> {
+    const emailKey = `login:email:${email}`
+    await this.enforceLimit(emailKey, MAX_ATTEMPTS_PER_EMAIL, EMAIL_WINDOW_SECONDS)
 
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const user = await this.prisma.user.findUnique({ where: { email } })
 
-    let valid: boolean;
+    let valid: boolean
     if (user) {
-      valid = await argon2.verify(user.passwordHash, password);
+      valid = await argon2.verify(user.passwordHash, password)
     } else {
-      await argon2.verify(DUMMY_PASSWORD_HASH, password);
-      valid = false;
+      await argon2.verify(DUMMY_PASSWORD_HASH, password)
+      valid = false
     }
 
     // Mesma mensagem e mesmo status para e-mail inexistente e senha errada:
@@ -60,24 +52,16 @@ export class AuthService {
     if (!user || !valid) {
       // Por IP só conta falha: um escritório atrás do mesmo NAT não pode se
       // bloquear com logins que deram certo.
-      await this.enforceLimit(
-        `login:ip:${ip}`,
-        MAX_ATTEMPTS_PER_IP,
-        IP_WINDOW_SECONDS,
-      );
+      await this.enforceLimit(`login:ip:${ip}`, MAX_ATTEMPTS_PER_IP, IP_WINDOW_SECONDS)
 
-      throw new AppException(
-        'UNAUTHENTICATED',
-        'E-mail ou senha inválidos',
-        401,
-      );
+      throw new AppException('UNAUTHENTICATED', 'E-mail ou senha inválidos', 401)
     }
 
     // Só o contador do e-mail zera no sucesso: zerar o do IP deixaria um
     // atacante logar na própria conta para continuar testando as outras.
-    await this.redis.delKey(emailKey);
+    await this.redis.delKey(emailKey)
 
-    return this.issue(user);
+    return this.issue(user)
   }
 
   async refresh(refreshToken: string): Promise<AuthResponse> {
@@ -87,41 +71,36 @@ export class AuthService {
         algorithms: ['HS256'],
       })
       .catch(() => {
-        throw new AppException('UNAUTHENTICATED', 'Sessão expirada', 401);
-      });
+        throw new AppException('UNAUTHENTICATED', 'Sessão expirada', 401)
+      })
 
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
-    });
-    if (!user)
-      throw new AppException('UNAUTHENTICATED', 'Sessão expirada', 401);
+    })
+    if (!user) throw new AppException('UNAUTHENTICATED', 'Sessão expirada', 401)
 
-    return this.issue(user);
+    return this.issue(user)
   }
 
   // Fail-open: com o Redis fora (contagem null) o login segue sem limite.
   // O Redis não é fonte de verdade, e bloquear todo login por uma queda do
   // cache seria pior que a força bruta, que o argon2 já torna cara.
-  private async enforceLimit(
-    key: string,
-    max: number,
-    windowSeconds: number,
-  ): Promise<void> {
-    const attempts = await this.redis.incrWithTtl(key, windowSeconds);
+  private async enforceLimit(key: string, max: number, windowSeconds: number): Promise<void> {
+    const attempts = await this.redis.incrWithTtl(key, windowSeconds)
 
     if (attempts !== null && attempts > max) {
       throw new AppException(
         'TOO_MANY_REQUESTS',
         'Muitas tentativas. Tente novamente em instantes.',
         429,
-      );
+      )
     }
   }
 
   // Recebe a linha inteira do Prisma, mas só os campos de SessionUser saem
   // na resposta: o passwordHash nunca chega ao cliente.
   private async issue(user: SessionUser): Promise<AuthResponse> {
-    const claims = { sub: user.id, role: user.role };
+    const claims = { sub: user.id, role: user.role }
 
     return {
       access_token: await this.jwt.signAsync(claims, { expiresIn: '15m' }),
@@ -135,6 +114,6 @@ export class AuthService {
         email: user.email,
         role: user.role,
       },
-    };
+    }
   }
 }

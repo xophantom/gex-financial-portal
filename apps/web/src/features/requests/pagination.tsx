@@ -18,7 +18,11 @@ export function Pagination({ page, totalPages }: { page: number; totalPages: num
   if (totalPages <= 1) return null
 
   return (
-    <nav aria-label="Paginação" aria-busy={isPending} className="flex items-center justify-between pt-4 text-sm">
+    <nav
+      aria-label="Paginação"
+      aria-busy={isPending}
+      className="flex items-center justify-between pt-4 text-sm"
+    >
       <button
         type="button"
         onClick={() => setPage(page - 1)}

@@ -5,7 +5,9 @@ import { ApiError } from './client'
 // Tipo estrutural em vez do ZodType: os schemas vêm de @gex/shared e o
 // apps/web não depende do zod diretamente.
 interface BodySchema<T> {
-  safeParse(input: unknown):
+  safeParse(
+    input: unknown,
+  ):
     | { success: true; data: T }
     | { success: false; error: { issues: { path: PropertyKey[]; message: string }[] } }
 }
@@ -15,7 +17,10 @@ type ParsedBody<T> = { ok: true; data: T } | { ok: false; response: NextResponse
 // Valida o corpo antes de ir à API, devolvendo o mesmo envelope 422 que o
 // backend usa. JSON malformado cai no mesmo caminho (vira null e falha no
 // schema).
-export async function parseBody<T>(request: Request, schema: BodySchema<T>): Promise<ParsedBody<T>> {
+export async function parseBody<T>(
+  request: Request,
+  schema: BodySchema<T>,
+): Promise<ParsedBody<T>> {
   const raw = await request.json().catch(() => null)
   const parsed = schema.safeParse(raw)
 

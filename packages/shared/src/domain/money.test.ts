@@ -22,12 +22,9 @@ describe('parseBrlToCents', () => {
     expect(parseBrlToCents('10')).toBe(1000)
   })
 
-  it.each(['0', '0,00', '-5,00', '1,234', 'abc', '', '  ', '1.2.3,45'])(
-    'rejects %s',
-    (input) => {
-      expect(() => parseBrlToCents(input)).toThrow()
-    },
-  )
+  it.each(['0', '0,00', '-5,00', '1,234', 'abc', '', '  ', '1.2.3,45'])('rejects %s', (input) => {
+    expect(() => parseBrlToCents(input)).toThrow()
+  })
 
   it('never loses a cent to binary floating point', () => {
     expect(parseBrlToCents('0,07')).toBe(7)

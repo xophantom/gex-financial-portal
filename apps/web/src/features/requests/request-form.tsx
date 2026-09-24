@@ -80,7 +80,10 @@ export function RequestForm() {
 
   if (createdId) {
     return (
-      <div role="status" className="space-y-3 rounded-md border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
+      <div
+        role="status"
+        className="space-y-3 rounded-md border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+      >
         <p>Solicitação registrada com sucesso.</p>
         <Link href={`/requests/${createdId}`} className="font-medium underline">
           Ver detalhes da solicitação
@@ -92,7 +95,10 @@ export function RequestForm() {
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
       {serverError && (
-        <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
+        <p
+          role="alert"
+          className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300"
+        >
           {serverError}
         </p>
       )}
@@ -200,12 +206,12 @@ export function RequestForm() {
 
       <Field id="description" label="Descrição (opcional)" error={errors.description?.message}>
         <textarea
-            id="description"
-            rows={3}
-            className={inputClass}
-            {...errorProps('description')}
-            {...register('description')}
-          />
+          id="description"
+          rows={3}
+          className={inputClass}
+          {...errorProps('description')}
+          {...register('description')}
+        />
       </Field>
 
       <button
