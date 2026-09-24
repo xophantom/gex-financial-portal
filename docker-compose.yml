@@ -69,7 +69,8 @@ services:
       dockerfile: apps/web/Dockerfile
     environment:
       API_INTERNAL_URL: http://api:3001
-      APP_TIMEZONE: ${APP_TIMEZONE:-America/Sao_Paulo}
+      # O Compose serve HTTP puro; atrás de HTTPS, use COOKIE_SECURE=true.
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
     ports:
       - '${WEB_PORT:-3000}:3000'
     depends_on:

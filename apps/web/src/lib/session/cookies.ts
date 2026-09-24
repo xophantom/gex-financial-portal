@@ -13,10 +13,17 @@ export const SESSION_COOKIE_NAMES = [ACCESS_COOKIE, REFRESH_COOKIE, USER_COOKIE]
 const ACCESS_MAX_AGE = 60 * 15
 const REFRESH_MAX_AGE = 60 * 60 * 24 * 7
 
+// Secure por padrão em produção. O Compose local serve HTTP puro e desliga com
+// COOKIE_SECURE=false: fora de um contexto seguro (IP da rede, Safari em
+// localhost), o navegador descarta o cookie Secure e o login não se sustenta.
+const secure = process.env.COOKIE_SECURE
+  ? process.env.COOKIE_SECURE === 'true'
+  : process.env.NODE_ENV === 'production'
+
 const baseCookie = {
   httpOnly: true,
   sameSite: 'lax' as const,
-  secure: process.env.NODE_ENV === 'production',
+  secure,
   path: '/',
 }
 

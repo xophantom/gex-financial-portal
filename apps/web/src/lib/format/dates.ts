@@ -1,5 +1,5 @@
-// Fuso em que o negócio pensa as datas (APP_TIMEZONE do backend) — nunca o
-// fuso do navegador de quem está olhando.
+// Fuso de exibição fixado pelo enunciado, nunca o do navegador de quem olha.
+// Este módulo também roda no browser, onde não há variável de ambiente.
 const APP_TIME_ZONE = 'America/Sao_Paulo'
 
 const dateFormatter = new Intl.DateTimeFormat('pt-BR', {
