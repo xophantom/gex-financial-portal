@@ -1,13 +1,27 @@
+# dependências e artefatos de build
 node_modules/
 dist/
 .next/
 coverage/
+*.tsbuildinfo
+apps/web/next-env.d.ts
+
+# ambiente local
 .env
-.env.local
+.env.*
+!.env.example
+
+# sistema e editores
 *.log
 .DS_Store
+.idea/
+.vscode/
 
-# ferramenta de construção e material da avaliadora, fora da entrega
+# gerados pelo `next dev` para agentes de IA
+apps/web/AGENTS.md
+apps/web/CLAUDE.md
+
+# material local, fora da entrega
 docs/
 candidato/
 .superpowers/
