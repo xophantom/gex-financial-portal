@@ -14,14 +14,16 @@ import {
   decisionSchema,
   listRequestsQuerySchema,
   markPaidSchema,
-  type CreateRequestInput,
-  type DecisionInput,
-  type ListRequestsQuery,
-  type MarkPaidInput,
 } from '@gex/shared';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { Roles } from '../auth/roles.decorator';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
+import {
+  CreateRequestDto,
+  DecisionDto,
+  ListRequestsQueryDto,
+  MarkPaidDto,
+} from './dto';
 import type { Viewer } from './requests.repository';
 import { RequestsService } from './requests.service';
 
@@ -39,7 +41,7 @@ export class RequestsController {
   @Get()
   list(
     @Query(new ZodValidationPipe(listRequestsQuerySchema))
-    query: ListRequestsQuery,
+    query: ListRequestsQueryDto,
     @CurrentUser() viewer: Viewer,
   ) {
     return this.service.list(query, viewer);
@@ -51,7 +53,7 @@ export class RequestsController {
   @Roles('REQUESTER')
   @HttpCode(201)
   create(
-    @Body(new ZodValidationPipe(createRequestSchema)) input: CreateRequestInput,
+    @Body(new ZodValidationPipe(createRequestSchema)) input: CreateRequestDto,
     @CurrentUser() requester: Viewer,
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
@@ -76,7 +78,7 @@ export class RequestsController {
   @HttpCode(200)
   decide(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body(new ZodValidationPipe(decisionSchema)) input: DecisionInput,
+    @Body(new ZodValidationPipe(decisionSchema)) input: DecisionDto,
     @CurrentUser() actor: Viewer,
   ) {
     return this.service.decide(id, input, actor);
@@ -87,7 +89,7 @@ export class RequestsController {
   @HttpCode(200)
   markPaid(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body(new ZodValidationPipe(markPaidSchema)) input: MarkPaidInput,
+    @Body(new ZodValidationPipe(markPaidSchema)) input: MarkPaidDto,
     @CurrentUser() actor: Viewer,
   ) {
     return this.service.markPaid(id, input, actor);

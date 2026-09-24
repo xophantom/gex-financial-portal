@@ -1,7 +1,9 @@
 import type { Server } from 'node:http';
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { PrismaClient } from '@prisma/client';
+import { cleanupOpenApiDoc } from 'nestjs-zod';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { BigIntInterceptor } from '../src/common/bigint.interceptor';
@@ -66,6 +68,22 @@ export async function createTestApp(): Promise<TestApp> {
   const app: INestApplication = moduleRef.createNestApplication();
   app.useGlobalInterceptors(new BigIntInterceptor());
   app.useGlobalFilters(new HttpExceptionFilter());
+
+  // createTestApp() monta a aplicação via Test.createTestingModule(), não
+  // via bootstrap() de main.ts — sem repetir aqui o mesmo setup do Swagger
+  // (como já se repete BigIntInterceptor e HttpExceptionFilter acima), o
+  // teste e2e de /docs nunca veria a rota, e um /health ou /docs que só
+  // existe no main.ts de produção não é provado por nenhum teste.
+  const document = SwaggerModule.createDocument(
+    app,
+    new DocumentBuilder()
+      .setTitle('Portal de Solicitações Financeiras')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build(),
+  );
+  SwaggerModule.setup('docs', app, cleanupOpenApiDoc(document));
+
   await app.init();
 
   const server = app.getHttpServer() as Server;
