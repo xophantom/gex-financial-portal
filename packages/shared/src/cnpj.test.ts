@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { formatCnpj, isValidCnpj, normalizeCnpj } from './cnpj'
+import { formatCnpj, isValidCnpj, normalizeCnpj } from './cnpj.js'
 
 const seed = JSON.parse(
   readFileSync(new URL('../../../data/seed_requests.json', import.meta.url), 'utf8'),

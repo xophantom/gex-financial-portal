@@ -5,6 +5,7 @@ export const ERROR_CODES = [
   'NOT_FOUND',
   'DUPLICATE_INVOICE',
   'INVALID_TRANSITION',
+  'CONFLICT',
   'TOO_MANY_REQUESTS',
   'INTERNAL_ERROR',
 ] as const

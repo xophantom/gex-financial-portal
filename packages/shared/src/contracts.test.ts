@@ -5,7 +5,7 @@ import {
   listRequestsQuerySchema,
   loginSchema,
   markPaidSchema,
-} from './contracts'
+} from './contracts.js'
 
 const ENGLISH_DEFAULT = /Required|Invalid enum value|Expected .* received|String must contain/
 

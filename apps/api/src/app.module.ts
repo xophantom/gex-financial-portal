@@ -1,10 +1,29 @@
-import { Module } from '@nestjs/common';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { LoggerModule } from 'nestjs-pino';
+import { AuthModule } from './auth/auth.module';
+import { ClockModule } from './clock/clock.module';
+import { CorrelationMiddleware } from './common/correlation.middleware';
+import { buildLogger } from './common/logger';
+import { PrismaModule } from './prisma/prisma.module';
+import { RedisModule } from './redis/redis.module';
+import { RequestsModule } from './requests/requests.module';
 
 @Module({
-  imports: [],
-  controllers: [AppController],
-  providers: [AppService],
+  imports: [
+    // A mesma instância de buildLogger() (redact + mixin de correlationId)
+    // vira o logger interno do Nest inteiro, não só das requisições HTTP.
+    LoggerModule.forRoot({ pinoHttp: { logger: buildLogger() } }),
+    PrismaModule,
+    ClockModule,
+    RedisModule,
+    AuthModule,
+    RequestsModule,
+  ],
+  controllers: [],
+  providers: [],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(CorrelationMiddleware).forRoutes('*');
+  }
+}
