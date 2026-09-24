@@ -1,25 +1,22 @@
 import type { RequestStatus } from '@gex/shared'
+import { Badge } from '@/components/ui/badge'
 import { statusLabel } from '@/lib/format/labels'
+import { cn } from '@/lib/utils'
+import { STATUS_STYLE } from './status-style'
 
-const STATUS_TONE: Record<RequestStatus, string> = {
-  PENDING:
-    'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200',
-  APPROVED:
-    'border-blue-300 bg-blue-50 text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200',
-  REJECTED:
-    'border-red-300 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200',
-  PAID: 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
-}
+export function StatusBadge({ status, className }: { status: RequestStatus; className?: string }) {
+  const style = STATUS_STYLE[status]
 
-const UNKNOWN_TONE =
-  'border-zinc-300 bg-zinc-50 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300'
-
-export function StatusBadge({ status }: { status: RequestStatus }) {
   return (
-    <span
-      className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_TONE[status] ?? UNKNOWN_TONE}`}
+    <Badge
+      variant="outline"
+      className={cn('gap-1.5 border-transparent', style?.soft, style?.text, className)}
     >
+      <span
+        aria-hidden="true"
+        className={cn('size-1.5 rounded-full', style?.fill ?? 'bg-muted-foreground')}
+      />
       {statusLabel(status)}
-    </span>
+    </Badge>
   )
 }
