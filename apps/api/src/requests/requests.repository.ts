@@ -10,6 +10,21 @@ import { toPrismaCategory } from './request-category.mapper'
 // % e _ são curingas de LIKE: sem escape, buscar "100%" casa com tudo.
 const escapeLike = (term: string) => term.replace(/[\\%_]/g, (char) => `\\${char}`)
 
+// O que a transição grava além do status, em termos do domínio: o service
+// decide, e só este repositório conhece o formato do Prisma.
+export interface TransitionChanges {
+  rejectionReason?: string
+  paidAt?: Date
+  paymentReference?: string
+}
+
+export interface TransitionDecision {
+  next: RequestStatus
+  changes?: TransitionChanges
+  // Motivo do evento de auditoria (rejeição, observação ou referência).
+  reason: string | null
+}
+
 @Injectable()
 export class RequestsRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -111,11 +126,7 @@ export class RequestsRepository {
   async transition(
     id: string,
     actorId: string,
-    decide: (current: { status: RequestStatus; createdAt: Date }) => {
-      next: RequestStatus
-      patch: Prisma.RequestUpdateInput
-      reason: string | null
-    },
+    decide: (current: { status: RequestStatus; createdAt: Date }) => TransitionDecision,
   ) {
     return this.prisma.$transaction(async (tx) => {
       // FOR UPDATE serializa decisões concorrentes sobre a mesma solicitação;
@@ -131,11 +142,11 @@ export class RequestsRepository {
 
       if (!locked) throw new AppException('NOT_FOUND', 'Solicitação não encontrada', 404)
 
-      const { next, patch, reason } = decide(locked)
+      const { next, changes, reason } = decide(locked)
 
       const updated = await tx.request.update({
         where: { id },
-        data: { ...patch, status: next },
+        data: { ...changes, status: next },
         include: { requester: { select: { id: true, name: true } } },
       })
 

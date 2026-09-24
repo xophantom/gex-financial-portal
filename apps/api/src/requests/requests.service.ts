@@ -139,7 +139,7 @@ export class RequestsService {
 
       return {
         next,
-        patch: input.decision === 'REJECT' ? { rejectionReason: input.reason } : {},
+        changes: input.decision === 'REJECT' ? { rejectionReason: input.reason } : undefined,
         // Na rejeição é o motivo (obrigatório pelo schema); na aprovação, a
         // observação opcional de quem aprovou.
         reason: input.reason ?? null,
@@ -187,8 +187,8 @@ export class RequestsService {
       }
 
       return {
-        next: 'PAID' as const,
-        patch: { paidAt, paymentReference: input.payment_reference },
+        next: 'PAID',
+        changes: { paidAt, paymentReference: input.payment_reference },
         // Os 5 eventos APPROVED→PAID do seed carregam a referência do pagamento
         // no campo reason; gravar null aqui tornaria o histórico inconsistente.
         reason: input.payment_reference,
