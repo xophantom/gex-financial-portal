@@ -10,6 +10,12 @@ import {
   Query,
 } from '@nestjs/common';
 import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
+import {
   createRequestSchema,
   decisionSchema,
   listRequestsQuerySchema,
@@ -34,11 +40,51 @@ import { RequestsService } from './requests.service';
 // RolesGuard continuam cobrindo isto via APP_GUARD global; sem @Roles, o
 // RolesGuard deixa passar qualquer usuário autenticado, que é exatamente o
 // que se quer aqui.
+//
+// @ApiBearerAuth() (fix round 1, doc fix): sem isto o documento registra o
+// esquema "bearer" (DocumentBuilder().addBearerAuth() em configure-app.ts)
+// mas não marca nenhum endpoint como exigindo-o — o cadeado no Swagger UI
+// só aparece nas rotas que carregam este decorator.
+@ApiTags('requests')
+@ApiBearerAuth()
 @Controller('requests')
 export class RequestsController {
   constructor(private readonly service: RequestsService) {}
 
+  // @ApiOperation description (fix round 1, doc fix): listRequestsQuerySchema
+  // tem uma regra entre campos (due_from <= due_to, via .refine() no schema
+  // do objeto inteiro) que o Swagger não tem onde pendurar — parâmetros de
+  // query são documentados um a um, então uma description no nível do
+  // objeto Zod não sobrevive ao achatamento em `parameters[]`. Só esta nota
+  // operação-a-operação torna a regra visível para quem lê o /docs.
+  //
+  // @ApiQuery() em due_from/due_to: tentei carregar a description via
+  // `.describe()` no próprio schema Zod primeiro (isoDate.optional()
+  // .describe(...)) — funciona para devolver `due_date` (usado direto,
+  // sem .optional(), num body DTO), mas confirmei gerando o doc de verdade
+  // que nestjs-zod não propaga a description por este caminho específico
+  // (ZodOptional envolvendo o ZodEffects do .refine(isCalendarDate) num
+  // parâmetro de query, não num body). Isto aqui é a saída explícita para
+  // fechar a lacuna, não uma segunda definição da validação — devo
+  // permanecer text-only, a regra de calendário continua vivendo só no
+  // isoDate.refine() do schema.
   @Get()
+  @ApiOperation({
+    description:
+      'due_from não pode ser posterior a due_to, quando os dois forem informados.',
+  })
+  @ApiQuery({
+    name: 'due_from',
+    required: false,
+    description:
+      'Data no formato AAAA-MM-DD; precisa ser uma data real do calendário',
+  })
+  @ApiQuery({
+    name: 'due_to',
+    required: false,
+    description:
+      'Data no formato AAAA-MM-DD; precisa ser uma data real do calendário',
+  })
   list(
     @Query(new ZodValidationPipe(listRequestsQuerySchema))
     query: ListRequestsQueryDto,

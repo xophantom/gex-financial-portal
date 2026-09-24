@@ -1,13 +1,11 @@
 import type { Server } from 'node:http';
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { PrismaClient } from '@prisma/client';
-import { cleanupOpenApiDoc } from 'nestjs-zod';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
-import { BigIntInterceptor } from '../src/common/bigint.interceptor';
-import { HttpExceptionFilter } from '../src/common/http-exception.filter';
+import { configureApp } from '../src/configure-app';
+import { withTimeout } from '../src/common/with-timeout';
 import { seed } from '../prisma/seed';
 import {
   pauseTestDatabase,
@@ -66,23 +64,15 @@ export async function createTestApp(): Promise<TestApp> {
     imports: [AppModule],
   }).compile();
   const app: INestApplication = moduleRef.createNestApplication();
-  app.useGlobalInterceptors(new BigIntInterceptor());
-  app.useGlobalFilters(new HttpExceptionFilter());
 
   // createTestApp() monta a aplicação via Test.createTestingModule(), não
-  // via bootstrap() de main.ts — sem repetir aqui o mesmo setup do Swagger
-  // (como já se repete BigIntInterceptor e HttpExceptionFilter acima), o
-  // teste e2e de /docs nunca veria a rota, e um /health ou /docs que só
-  // existe no main.ts de produção não é provado por nenhum teste.
-  const document = SwaggerModule.createDocument(
-    app,
-    new DocumentBuilder()
-      .setTitle('Portal de Solicitações Financeiras')
-      .setVersion('1.0')
-      .addBearerAuth()
-      .build(),
-  );
-  SwaggerModule.setup('docs', app, cleanupOpenApiDoc(document));
+  // via bootstrap() de main.ts — configureApp() é a mesma função que
+  // main.ts chama, para que o app testado nunca divirja do app de
+  // produção (fix round 1, Finding 3: antes cada um tinha sua própria
+  // cópia colada do setup do Swagger, e a cópia daqui era precisamente o
+  // que provava /docs funcionar — uma divergência faria o teste validar
+  // algo que o binário real não faz).
+  configureApp(app);
 
   await app.init();
 
@@ -97,8 +87,32 @@ export async function createTestApp(): Promise<TestApp> {
       // verdade com o reaper, não instantaneamente, então isso pode
       // sobreviver ao processo de teste. allSettled garante que a falha de
       // um stop não impede a tentativa do outro.
+      //
+      // withTimeout é a segunda camada de defesa (fix round 1, Finding 1):
+      // um `finally` só roda depois que a Promise do `try` SE RESOLVE (ou
+      // rejeita) — contra um Postgres pausado (SIGSTOP), a chamada
+      // PrismaService.onModuleDestroy() → $disconnect() dentro de
+      // app.close() não faz nenhuma das duas, ela nunca se resolve.
+      // Aconteceu de verdade durante este trabalho (duas vezes: Step 3 e o
+      // teste de mutação), sempre exigindo `docker unpause`/`stop`/`rm`
+      // manual para destravar o Jest — mesmo com o try/finally que já
+      // existia aqui. Por isso este close() nunca deve esperar
+      // indefinidamente por app.close(): passado o timeout, ele desiste,
+      // loga bem alto (não silenciosamente) e segue para
+      // stopTestRedis()/stopTestDatabase(), que derrubam os containers via
+      // API do Docker independentemente de terem sido pausados ou não.
+      const CLOSE_TIMEOUT_MS = 5_000;
       try {
-        await app.close();
+        await withTimeout(
+          app.close(),
+          CLOSE_TIMEOUT_MS,
+          `app.close() did not settle within ${CLOSE_TIMEOUT_MS}ms`,
+        );
+      } catch (error) {
+        console.error(
+          '[TestApp.close] app.close() timed out or failed — forcing container teardown anyway:',
+          error,
+        );
       } finally {
         await Promise.allSettled([stopTestRedis(), stopTestDatabase()]);
       }

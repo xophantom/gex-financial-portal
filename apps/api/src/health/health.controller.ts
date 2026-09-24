@@ -2,8 +2,9 @@ import { Controller, Get, Res } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { Public } from '../auth/public.decorator';
-import { PrismaService } from '../prisma/prisma.service';
+import { withTimeout } from '../common/with-timeout';
 import { RedisService } from '../redis/redis.service';
+import { HealthDatabaseClient } from './health-database.client';
 
 // `docker pause` (usado pelos testes e2e para simular indisponibilidade)
 // congela o processo sem derrubar a conexão TCP: sem um timeout aqui, a
@@ -15,31 +16,13 @@ import { RedisService } from '../redis/redis.service';
 // container ficava pausado para sempre.
 const HEALTH_CHECK_TIMEOUT_MS = 1500;
 
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error(`health check timed out after ${ms}ms`)),
-      ms,
-    );
-
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (error: unknown) => {
-        clearTimeout(timer);
-        reject(error instanceof Error ? error : new Error(String(error)));
-      },
-    );
-  });
-}
-
 @ApiTags('health')
 @Controller('health')
 export class HealthController {
   constructor(
-    private readonly prisma: PrismaService,
+    // Conexão dedicada, não a PrismaService @Global() — ver
+    // health-database.client.ts para o porquê (Finding 2, fix round 1).
+    private readonly db: HealthDatabaseClient,
     private readonly redis: RedisService,
   ) {}
 
@@ -55,10 +38,18 @@ export class HealthController {
     // timeout, então rodá-las em série somaria os dois piores casos ao
     // invés de limitar a resposta ao maior deles.
     const [database, redis] = await Promise.all([
-      withTimeout(this.prisma.$queryRaw`SELECT 1`, HEALTH_CHECK_TIMEOUT_MS)
+      withTimeout(
+        this.db.$queryRaw`SELECT 1`,
+        HEALTH_CHECK_TIMEOUT_MS,
+        `database check timed out after ${HEALTH_CHECK_TIMEOUT_MS}ms`,
+      )
         .then(() => 'up' as const)
         .catch(() => 'down' as const),
-      withTimeout(this.redis.ping(), HEALTH_CHECK_TIMEOUT_MS)
+      withTimeout(
+        this.redis.ping(),
+        HEALTH_CHECK_TIMEOUT_MS,
+        `redis check timed out after ${HEALTH_CHECK_TIMEOUT_MS}ms`,
+      )
         .then(() => 'up' as const)
         .catch(() => 'down' as const),
     ]);

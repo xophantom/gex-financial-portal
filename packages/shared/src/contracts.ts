@@ -13,10 +13,16 @@ export const REQUEST_CATEGORIES = [
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 
+// .describe() é metadado puro do Zod — não muda parse()/validação, só some
+// como "description" no schema gerado. Sem isto, o `.refine(isCalendarDate)`
+// abaixo é invisível na documentação OpenAPI (nestjs-zod descreve o `pattern`
+// do regex, mas não tem como expressar "e também precisa existir no
+// calendário" em JSON Schema) — fix round 1, doc fix.
 const isoDate = z
   .string({ required_error: 'Informe a data', invalid_type_error: 'Informe a data' })
   .regex(ISO_DATE, 'Use o formato AAAA-MM-DD')
   .refine(isCalendarDate, 'Essa data não existe no calendário')
+  .describe('Data no formato AAAA-MM-DD; precisa ser uma data real do calendário (ex.: 30/02 é rejeitado)')
 
 const positiveInt = (max: number, label: string) =>
   z.coerce
@@ -31,10 +37,16 @@ export const createRequestSchema = z.object({
     .trim()
     .min(1, 'Informe o fornecedor')
     .max(200, 'O nome do fornecedor não pode passar de 200 caracteres'),
+  // .describe() aqui por um motivo específico: nestjs-zod desembrulha
+  // `.refine()`/`.transform()` para gerar o JSON Schema, e descarta o
+  // predicado — sem a description, o documento mostraria só
+  // `{"type":"string"}`, escondendo que os dígitos verificadores do CNPJ
+  // são conferidos no backend (fix round 1, doc fix).
   supplier_cnpj: z
     .string({ required_error: 'Informe o CNPJ', invalid_type_error: 'Informe o CNPJ' })
     .refine(isValidCnpj, 'CNPJ inválido')
-    .transform(normalizeCnpj),
+    .transform(normalizeCnpj)
+    .describe('CNPJ do fornecedor, com ou sem máscara; os dígitos verificadores são validados no backend'),
   invoice_number: z
     .string({
       required_error: 'Informe o número da nota',
@@ -57,7 +69,8 @@ export const createRequestSchema = z.object({
         ctx.addIssue({ code: 'custom', message: 'Competência inválida' })
       }
     })
-    .transform(parseCompetenceInput),
+    .transform(parseCompetenceInput)
+    .describe('Competência no formato MM/AAAA (ex.: 03/2026) ou AAAA-MM'),
   due_date: isoDate,
   category: z.enum(REQUEST_CATEGORIES, { message: 'Categoria inválida' }),
   description: z.string().trim().max(1000, 'A descrição não pode passar de 1000 caracteres').optional(),
@@ -69,13 +82,20 @@ export const listRequestsQuerySchema = z
     page_size: positiveInt(100, 'O tamanho da página').default(20),
     status: z.enum(REQUEST_STATUSES, { message: 'Status inválido' }).optional(),
     supplier: z.string().trim().min(1).max(200).optional(),
-    due_from: isoDate.optional(),
-    due_to: isoDate.optional(),
+    // .describe() de novo aqui, não só em isoDate: .optional() cria um nó
+    // novo (ZodOptional) que não herda a description do schema que embrulha
+    // — confirmado gerando o doc de verdade e vendo devolver só
+    // `{"pattern":...}`, sem "description", antes desta linha existir.
+    due_from: isoDate.optional().describe(isoDate.description ?? ''),
+    due_to: isoDate.optional().describe(isoDate.description ?? ''),
   })
   .refine(
     (query) => !query.due_from || !query.due_to || query.due_from <= query.due_to,
     { message: 'O início do período não pode ser posterior ao fim', path: ['due_from'] },
   )
+  // Regra entre campos (due_from <= due_to): invisível em JSON Schema, que só
+  // descreve campos isoladamente — fix round 1, doc fix.
+  .describe('due_from não pode ser posterior a due_to, quando os dois forem informados')
 
 export const decisionSchema = z
   .object({
@@ -86,6 +106,9 @@ export const decisionSchema = z
     message: 'Informe o motivo da rejeição',
     path: ['reason'],
   })
+  // Regra entre campos (reason obrigatório quando decision é REJECT):
+  // invisível em JSON Schema — fix round 1, doc fix.
+  .describe('reason é obrigatório quando decision é REJECT')
 
 export const markPaidSchema = z.object({
   paid_at: z
