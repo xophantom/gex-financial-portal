@@ -38,6 +38,17 @@ describe('isValidCnpj', () => {
     },
   )
 
+  it('accepts a mask with spaces', () => {
+    expect(isValidCnpj(' 10.000.000 / 0001-45 ')).toBe(true)
+  })
+
+  it.each(['abc10000000000145xyz', '10000000000145a', '10_000_000_0001_45', '10.000.000/0001-45\n#'])(
+    'rejects characters outside the mask in %j',
+    (input) => {
+      expect(isValidCnpj(input)).toBe(false)
+    },
+  )
+
   it.each(['1000000000014', '100000000001455', '', 'abcdefghijklmn'])(
     'rejects malformed input %s',
     (input) => {

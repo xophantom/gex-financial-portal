@@ -1,3 +1,7 @@
+// Só dígitos e os caracteres da máscara (. / - e espaços): sem isto,
+// "abc10000000000145xyz" viraria um CNPJ válido depois de normalizado.
+const CNPJ_INPUT = /^[\d./\-\s]*$/
+
 export function normalizeCnpj(input: string): string {
   return input.replace(/\D/g, '')
 }
@@ -16,6 +20,8 @@ function checkDigit(digits: number[]): number {
 }
 
 export function isValidCnpj(input: string): boolean {
+  if (!CNPJ_INPUT.test(input)) return false
+
   const digits = normalizeCnpj(input)
 
   if (!/^\d{14}$/.test(digits)) return false

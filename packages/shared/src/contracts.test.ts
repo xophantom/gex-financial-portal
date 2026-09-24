@@ -5,6 +5,7 @@ import {
   listRequestsQuerySchema,
   loginSchema,
   markPaidSchema,
+  refreshSchema,
 } from './contracts.js'
 
 const ENGLISH_DEFAULT = /Required|Invalid enum value|Expected .* received|String must contain/
@@ -37,6 +38,23 @@ describe('createRequestSchema', () => {
     expect(() =>
       createRequestSchema.parse({ ...validRequest, supplier_cnpj: '10000000000146' }),
     ).toThrow()
+  })
+
+  it.each([
+    ['nf-2026-1001', 'NF-2026-1001'],
+    ['  NF-2026-1001  ', 'NF-2026-1001'],
+    ['nf   2026\t1001', 'NF 2026 1001'],
+  ])('normalizes the invoice number %j to %j', (invoice_number, expected) => {
+    expect(createRequestSchema.parse({ ...validRequest, invoice_number }).invoice_number).toBe(expected)
+  })
+
+  it('rejects a CNPJ with characters outside the mask', () => {
+    const issue = firstIssue(
+      createRequestSchema.safeParse({ ...validRequest, supplier_cnpj: 'abc10000000000145xyz' }),
+    )
+
+    expect(issue.path).toEqual(['supplier_cnpj'])
+    expect(issue.message).toBe('CNPJ inválido')
   })
 
   it.each([0, -1, 1.5])('rejects the amount %s', (amount_cents) => {
@@ -232,22 +250,36 @@ describe('decisionSchema', () => {
 })
 
 describe('markPaidSchema', () => {
+  const parsePaidAt = (paid_at: string) => markPaidSchema.safeParse({ paid_at, payment_reference: 'PAG-1' })
+
   it('requires both date and reference', () => {
     expect(() => markPaidSchema.parse({ paid_at: '2026-09-18' })).toThrow()
     expect(() => markPaidSchema.parse({ payment_reference: 'PAG-1' })).toThrow()
   })
 
-  it('accepts a plain date and a full ISO timestamp', () => {
-    expect(() =>
-      markPaidSchema.parse({ paid_at: '2026-09-18', payment_reference: 'PAG-1' }),
-    ).not.toThrow()
-    expect(() =>
-      markPaidSchema.parse({
-        paid_at: '2026-09-18T14:00:00-03:00',
-        payment_reference: 'PAG-1',
-      }),
-    ).not.toThrow()
+  it('accepts a real calendar date', () => {
+    expect(parsePaidAt('2026-09-18').success).toBe(true)
+    expect(parsePaidAt('2024-02-29').success).toBe(true)
   })
+
+  it.each(['2026-02-31', '2026-13-01', '2025-02-29'])('rejects the calendar-invalid date %s', (paid_at) => {
+    const issue = firstIssue(parsePaidAt(paid_at))
+
+    expect(issue.path).toEqual(['paid_at'])
+    expect(issue.message).toBe('Essa data não existe no calendário')
+  })
+
+  it.each(['2026-09-18Tlixo', '2026-09-18T14:00:00-03:00', '18/09/2026', ''])(
+    'rejects anything other than AAAA-MM-DD: %s',
+    (paid_at) => {
+      const result = parsePaidAt(paid_at)
+
+      expect(result.success).toBe(false)
+      expect(result.error?.issues).toEqual([
+        expect.objectContaining({ path: ['paid_at'], message: 'Use o formato AAAA-MM-DD' }),
+      ])
+    },
+  )
 
   it('rejects a blank payment reference', () => {
     expect(() =>
@@ -281,10 +313,24 @@ describe('loginSchema', () => {
     expect(issue.message).toBe('E-mail inválido')
   })
 
+  it('normalizes the email to trimmed lowercase', () => {
+    const parsed = loginSchema.parse({ email: '  Financeiro@Empresa.COM ', password: 'segredo123' })
+    expect(parsed.email).toBe('financeiro@empresa.com')
+  })
+
   it('accepts a valid login payload', () => {
     expect(() =>
       loginSchema.parse({ email: 'financeiro@empresa.com', password: 'segredo123' }),
     ).not.toThrow()
+  })
+})
+
+describe('refreshSchema', () => {
+  it.each([{}, { refresh_token: '' }, { refresh_token: 42 }])('rejects %j', (input) => {
+    const issue = firstIssue(refreshSchema.safeParse(input))
+
+    expect(issue.path).toEqual(['refresh_token'])
+    expect(issue.message).toBe('Informe o refresh token')
   })
 })
 
@@ -296,6 +342,7 @@ describe('localized error messages', () => {
       { name: 'decisionSchema', schema: decisionSchema, input: { decision: 'MAYBE' } },
       { name: 'markPaidSchema', schema: markPaidSchema, input: {} },
       { name: 'loginSchema', schema: loginSchema, input: {} },
+      { name: 'refreshSchema', schema: refreshSchema, input: {} },
     ]
 
     for (const { name, schema, input } of brokenPayloads) {
