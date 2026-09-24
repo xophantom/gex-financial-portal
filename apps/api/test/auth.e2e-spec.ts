@@ -55,11 +55,73 @@ describe('POST /auth/login', () => {
     expect(JSON.stringify(response.body)).not.toContain('$argon2');
   });
 
+  it('accepts the email in any letter case', async () => {
+    await request(app.server)
+      .post('/auth/login')
+      .send({ email: '  Solicitante@GEX.test ', password: 'GexRequester123!' })
+      .expect(200);
+  });
+
+  it('refuses malformed JSON with 422 VALIDATION_ERROR', async () => {
+    const response = await request(app.server)
+      .post('/auth/login')
+      .set('Content-Type', 'application/json')
+      .send('{"email": "solicitante@gex.test",')
+      .expect(422);
+
+    const body = response.body as ErrorBody;
+    expect(body.error).toEqual({
+      code: 'VALIDATION_ERROR',
+      message: 'Dados inválidos',
+    });
+  });
+
   it('rejects a malformed email with 422', async () => {
     await request(app.server)
       .post('/auth/login')
       .send({ email: 'not-an-email', password: 'x' })
       .expect(422);
+  });
+});
+
+describe('POST /auth/refresh', () => {
+  it('issues a new token pair with 200', async () => {
+    const login = await request(app.server)
+      .post('/auth/login')
+      .send({ email: 'financeiro@gex.test', password: 'GexFinance123!' });
+    const { refresh_token: refreshToken } = login.body as TokenPairBody;
+
+    const response = await request(app.server)
+      .post('/auth/refresh')
+      .send({ refresh_token: refreshToken })
+      .expect(200);
+
+    const body = response.body as TokenPairBody;
+    expect(body.access_token).toEqual(expect.any(String));
+    expect(body.refresh_token).toEqual(expect.any(String));
+  });
+
+  it.each([{}, { refresh_token: 42 }, { refresh_token: '' }])(
+    'refuses the body %j with 422',
+    async (payload) => {
+      const response = await request(app.server)
+        .post('/auth/refresh')
+        .send(payload)
+        .expect(422);
+
+      const body = response.body as ErrorBody;
+      expect(body.error.code).toBe('VALIDATION_ERROR');
+    },
+  );
+});
+
+describe('unknown routes', () => {
+  it('answers 404 with a Portuguese message', async () => {
+    const response = await request(app.server).get('/nao-existe').expect(404);
+
+    expect(response.body).toEqual({
+      error: { code: 'NOT_FOUND', message: 'Rota não encontrada' },
+    });
   });
 });
 
@@ -76,15 +138,7 @@ describe('protected routes', () => {
   });
 });
 
-// A parte que Task 10 aprendeu do jeito difícil: um guard testado isolado
-// não prova nada sobre o app rodando. Até a Tarefa 11, GET /requests era um
-// stub @Roles('FINANCE') que existia só para provar RolesGuard via HTTP de
-// verdade. A Tarefa 12 substituiu o stub pelo domínio real: a rota agora é
-// de ambos os papéis (FINANCE vê tudo, REQUESTER só as próprias, filtrado no
-// where() do repositório) — então "REQUESTER recebe 403" deixou de ser
-// verdade aqui, e virou o teste de escopo abaixo. A prova de RolesGuard
-// barrando por papel volta a ter onde acontecer na primeira rota
-// genuinamente FINANCE-only (aprovar/rejeitar/marcar pago).
+// Guards provados contra o app rodando, não isolados.
 describe('authenticated access to a running route', () => {
   it('lets a FINANCE user through', async () => {
     const token = await app.tokenFor('financeiro@gex.test', 'GexFinance123!');
@@ -120,13 +174,8 @@ describe('authenticated access to a running route', () => {
   });
 });
 
-// Fix round 1: @nestjs/jwt cai de volta para o secret padrão do módulo
-// (JWT_SECRET) quando `secret` é `undefined` — verificado lendo
-// jwt.service.js diretamente e reproduzido num script isolado. Isso
-// colapsaria access e refresh token na mesma chave se JWT_REFRESH_SECRET
-// nunca fosse validado. Estes dois testes provam, contra o app rodando de
-// verdade (helpers.ts usa um JWT_SECRET e um JWT_REFRESH_SECRET distintos),
-// que as duas chaves continuam genuinamente separadas.
+// Com `secret: undefined`, o @nestjs/jwt usaria JWT_SECRET para os dois
+// tokens; helpers.ts usa segredos distintos para provar a separação.
 describe('access and refresh tokens use distinct secrets', () => {
   it('rejects a refresh token used as an access token', async () => {
     const login = await request(app.server)
