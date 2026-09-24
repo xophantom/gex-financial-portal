@@ -1,38 +1,38 @@
 'use client'
 
-import { createRequestSchema, REQUEST_CATEGORIES, type CreateRequestInput } from '@gex/shared'
+import {
+  createRequestSchema,
+  REQUEST_CATEGORIES,
+  type CreateRequestFormInput,
+  type CreateRequestInput,
+} from '@gex/shared'
 import { zodResolver } from '@hookform/resolvers/zod'
 import Link from 'next/link'
 import { useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { CnpjInput, CompetenceInput, MoneyInput } from './masked-inputs'
 
-// Nenhum dos .transform() do schema (CNPJ mascarado -> dígitos, MM/AAAA ->
-// AAAA-MM) muda o tipo TypeScript do campo, só o valor em runtime — os dois
-// já chegam e saem como `string`. Por isso z.input e z.output coincidem
-// aqui, e um único tipo (CreateRequestInput, que já é a saída) serve tanto
-// para o estado do formulário quanto para o que o onSubmit recebe.
-const emptyDefaults = {
+// Estado do formulário = entrada do schema (antes dos transforms); o
+// onSubmit recebe a saída já normalizada (CreateRequestInput).
+type RequestFormValues = CreateRequestFormInput
+
+// category fica de fora: '' não é uma categoria válida. O <select> começa em
+// "Selecione" via defaultValue e o resolver acusa se nada for escolhido.
+const emptyDefaults: Partial<RequestFormValues> = {
   supplier_name: '',
   supplier_cnpj: '',
   invoice_number: '',
   amount_cents: 0,
   competence: '',
   due_date: '',
-  category: '',
   description: '',
-} as unknown as CreateRequestInput
+}
 
 export function RequestForm() {
   const [serverError, setServerError] = useState<string | null>(null)
   const [createdId, setCreatedId] = useState<string | null>(null)
-  // Uma chave por montagem do formulário, não por tentativa de envio: se o
-  // usuário reenvia após uma falha de rede, a API precisa reconhecer o
-  // retry como a MESMA operação — gerar uma chave nova a cada clique
-  // derrotaria a proteção de idempotência. useState (não useRef): o linter
-  // de hooks trata a leitura de ref.current dentro de um callback passado
-  // para handleSubmit() como possível leitura de ref durante a renderização;
-  // um valor de estado lido diretamente não tem essa restrição.
+  // Uma chave por montagem, não por envio: um reenvio após falha de rede
+  // precisa ser reconhecido pela API como a mesma operação.
   const [idempotencyKey] = useState(() => crypto.randomUUID())
 
   const {
@@ -40,26 +40,34 @@ export function RequestForm() {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<CreateRequestInput>({
+  } = useForm<RequestFormValues, unknown, CreateRequestInput>({
     resolver: zodResolver(createRequestSchema),
     defaultValues: emptyDefaults,
   })
 
+  // Liga o campo à mensagem de erro para leitores de tela.
+  const errorProps = (name: keyof RequestFormValues) =>
+    errors[name] ? { 'aria-invalid': true, 'aria-describedby': `${name}-error` } : {}
+
   const onSubmit = async (values: CreateRequestInput) => {
     setServerError(null)
 
-    const response = await fetch('/api/requests', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'Idempotency-Key': idempotencyKey,
-      },
-      body: JSON.stringify(values),
-    })
+    let response: Response
+    try {
+      response = await fetch('/api/requests', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'Idempotency-Key': idempotencyKey,
+        },
+        body: JSON.stringify(values),
+      })
+    } catch {
+      setServerError('Não foi possível falar com o servidor. Tente novamente.')
+      return
+    }
 
-    // .catch(() => null): mesma razão do login-form — uma resposta sem corpo
-    // JSON (502 do próprio BFF, API fora do ar) não pode estourar dentro do
-    // submit e deixar o usuário sem nenhuma mensagem.
+    // Resposta sem corpo JSON (ex.: 502 do BFF) não pode estourar o submit.
     const body = await response.json().catch(() => null)
 
     if (!response.ok) {
@@ -94,6 +102,7 @@ export function RequestForm() {
           <input
             id="supplier_name"
             className={inputClass}
+            {...errorProps('supplier_name')}
             {...register('supplier_name')}
           />
         </Field>
@@ -103,7 +112,14 @@ export function RequestForm() {
             name="supplier_cnpj"
             control={control}
             render={({ field }) => (
-              <CnpjInput id="supplier_cnpj" className={inputClass} value={field.value} onChange={field.onChange} />
+              <CnpjInput
+                id="supplier_cnpj"
+                className={inputClass}
+                {...errorProps('supplier_cnpj')}
+                value={field.value}
+                onChange={field.onChange}
+                onBlur={field.onBlur}
+              />
             )}
           />
         </Field>
@@ -112,6 +128,7 @@ export function RequestForm() {
           <input
             id="invoice_number"
             className={inputClass}
+            {...errorProps('invoice_number')}
             {...register('invoice_number')}
           />
         </Field>
@@ -121,7 +138,14 @@ export function RequestForm() {
             name="amount_cents"
             control={control}
             render={({ field }) => (
-              <MoneyInput id="amount_cents" className={inputClass} value={field.value} onChange={field.onChange} />
+              <MoneyInput
+                id="amount_cents"
+                className={inputClass}
+                {...errorProps('amount_cents')}
+                value={field.value}
+                onChange={field.onChange}
+                onBlur={field.onBlur}
+              />
             )}
           />
         </Field>
@@ -134,8 +158,10 @@ export function RequestForm() {
               <CompetenceInput
                 id="competence"
                 className={inputClass}
+                {...errorProps('competence')}
                 value={field.value}
                 onChange={field.onChange}
+                onBlur={field.onBlur}
                 placeholder="MM/AAAA"
               />
             )}
@@ -143,11 +169,23 @@ export function RequestForm() {
         </Field>
 
         <Field id="due_date" label="Vencimento" error={errors.due_date?.message}>
-          <input id="due_date" type="date" className={inputClass} {...register('due_date')} />
+          <input
+            id="due_date"
+            type="date"
+            className={inputClass}
+            {...errorProps('due_date')}
+            {...register('due_date')}
+          />
         </Field>
 
         <Field id="category" label="Categoria" error={errors.category?.message}>
-          <select id="category" className={inputClass} {...register('category')}>
+          <select
+            id="category"
+            defaultValue=""
+            className={inputClass}
+            {...errorProps('category')}
+            {...register('category')}
+          >
             <option value="" disabled>
               Selecione
             </option>
@@ -161,7 +199,13 @@ export function RequestForm() {
       </div>
 
       <Field id="description" label="Descrição (opcional)" error={errors.description?.message}>
-        <textarea id="description" rows={3} className={inputClass} {...register('description')} />
+        <textarea
+            id="description"
+            rows={3}
+            className={inputClass}
+            {...errorProps('description')}
+            {...register('description')}
+          />
       </Field>
 
       <button

@@ -96,6 +96,38 @@ describe('RequestForm', () => {
     resolve({ ok: true, json: async () => ({ id: 'new-id' }) } as Response)
   })
 
+  it('starts with no category selected and requires one', async () => {
+    render(<RequestForm />)
+    expect(screen.getByLabelText(/categoria/i)).toHaveValue('')
+
+    await userEvent.click(screen.getByRole('button', { name: /cadastrar/i }))
+
+    expect(await screen.findByText(/categoria inválida/i)).toBeInTheDocument()
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('links an invalid field to its error message', async () => {
+    render(<RequestForm />)
+    await fill()
+    await userEvent.clear(screen.getByLabelText(/cnpj/i))
+    await userEvent.type(screen.getByLabelText(/cnpj/i), '10000000000146')
+    await userEvent.click(screen.getByRole('button', { name: /cadastrar/i }))
+
+    const cnpj = screen.getByLabelText(/cnpj/i)
+    await waitFor(() => expect(cnpj).toHaveAttribute('aria-invalid', 'true'))
+    expect(cnpj).toHaveAccessibleDescription(/cnpj inválido/i)
+  })
+
+  it('shows a message when the server cannot be reached', async () => {
+    vi.mocked(fetch).mockRejectedValue(new TypeError('Failed to fetch'))
+
+    render(<RequestForm />)
+    await fill()
+    await userEvent.click(screen.getByRole('button', { name: /cadastrar/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/não foi possível/i)
+  })
+
   it('surfaces a duplicate conflict on the invoice field', async () => {
     vi.mocked(fetch).mockResolvedValue({
       ok: false,

@@ -1,18 +1,16 @@
 'use client'
 
-import { formatCentsToBrl, formatCnpj } from '@gex/shared'
+import { formatCentsToBrl, formatCnpj, parseBrlToCents } from '@gex/shared'
 
 type BaseInputProps = Omit<
   React.InputHTMLAttributes<HTMLInputElement>,
   'value' | 'onChange' | 'inputMode'
 >
 
-// Todo campo mascarado guarda os DÍGITOS crus como fonte da verdade (ou o
-// inteiro de centavos, para o dinheiro) — a máscara é só a forma de exibir
-// esse valor. Nenhuma string brasileira formatada é o que sai deste
-// componente para o formulário; é sempre o dado que a API espera.
+// Cada campo entrega ao formulário o dado que a API espera (centavos,
+// dígitos do CNPJ); a máscara é só apresentação.
 
-export interface MoneyInputProps extends BaseInputProps {
+export interface MoneyInputProps extends Omit<BaseInputProps, 'onPaste'> {
   value: number
   onChange: (cents: number) => void
 }
@@ -20,12 +18,29 @@ export interface MoneyInputProps extends BaseInputProps {
 export function MoneyInput({ value, onChange, ...rest }: MoneyInputProps) {
   const display = value > 0 ? formatCentsToBrl(value) : ''
 
+  // Digitando, cada dígito entra como centavo (155313 -> 1.553,13).
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const digits = event.target.value.replace(/\D/g, '')
-    onChange(digits === '' ? 0 : Number(digits))
+    const cents = digits === '' ? 0 : Number(digits)
+    // Acima de MAX_SAFE_INTEGER o número perde precisão (e formatCentsToBrl lança).
+    if (Number.isSafeInteger(cents)) onChange(cents)
   }
 
-  return <input {...rest} inputMode="numeric" value={display} onChange={handleChange} />
+  // Colando, o texto é lido como valor em reais ("10" -> 10,00). Se não for
+  // um valor válido, a colagem é ignorada e o valor atual fica intacto —
+  // extrair só os dígitos daria um valor diferente sem o usuário perceber.
+  const handlePaste = (event: React.ClipboardEvent<HTMLInputElement>) => {
+    event.preventDefault()
+    try {
+      onChange(parseBrlToCents(event.clipboardData.getData('text')))
+    } catch {
+      // mantém o valor atual
+    }
+  }
+
+  return (
+    <input {...rest} inputMode="numeric" value={display} onChange={handleChange} onPaste={handlePaste} />
+  )
 }
 
 export interface CnpjInputProps extends BaseInputProps {
@@ -35,9 +50,7 @@ export interface CnpjInputProps extends BaseInputProps {
 
 export function CnpjInput({ value, onChange, ...rest }: CnpjInputProps) {
   const digits = value.replace(/\D/g, '').slice(0, 14)
-  // formatCnpj só reconhece o padrão de 14 dígitos completo — enquanto o
-  // usuário digita, exibimos os dígitos crus; a pontuação aparece de uma vez
-  // no 14º dígito, e é isso que o teste confere no valor final.
+  // formatCnpj só formata os 14 dígitos completos; até lá, dígitos crus.
   const display = digits.length === 14 ? formatCnpj(digits) : digits
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
