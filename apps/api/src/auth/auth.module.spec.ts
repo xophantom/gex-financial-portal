@@ -11,14 +11,9 @@ import { RedisService } from '../infra/redis/redis.service'
 import { AuthModule } from './auth.module'
 import { resolveJwtSecret } from './jwt-secrets'
 
-// Testa exatamente a mesma expressão que AuthModule usa para configurar o
-// JwtModule (`JwtModule.registerAsync({ useFactory: () => ({ secret:
-// resolveJwtSecret() }) })`), isolada de PrismaModule/RedisModule — que abrem
-// conexões reais e, quando compile() rejeita no meio da montagem do módulo,
-// deixam esse socket aberto (visto na prática: a suíte inteira não saía
-// depois que AppModule passou a rejeitar sem JWT_SECRET). Isto prova a mesma
-// coisa — "resolver o provider JWT sem a env var falha, nomeando a
-// variável" — sem esse efeito colateral.
+// Testa a mesma factory que o AuthModule usa no JwtModule, isolada de
+// PrismaModule/RedisModule: quando compile() falha no meio da montagem, as
+// conexões reais deles ficam abertas e a suíte não termina.
 describe('AuthModule JWT provider', () => {
   const originalEnv = { ...process.env }
 

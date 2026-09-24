@@ -1,10 +1,6 @@
-// Compartilhado entre qualquer chamada que dependa de uma dependência
-// externa capaz de congelar sem nunca rejeitar — um Postgres/Redis
-// pausado via `docker pause` (SIGSTOP: soquete fica aberto, mas nada
-// nunca responde, sem RST e sem timeout de rede) ou um coletor OTLP fora
-// do ar. Nenhuma promessa de fora do processo deve conseguir prendê-lo
-// para sempre; usado pelo probe de health, pela conexão inicial do
-// RedisService e pelo desligamento da telemetria em main.ts.
+// Limita a espera por uma dependência externa que pode congelar sem nunca
+// rejeitar (Postgres/Redis pausados, coletor OTLP fora do ar). Usado pelo
+// health check, pela conexão inicial do Redis e pelo desligamento da telemetria.
 export function withTimeout<T>(
   promise: Promise<T>,
   ms: number,

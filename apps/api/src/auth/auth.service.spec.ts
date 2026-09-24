@@ -16,18 +16,12 @@ const user = {
   passwordHash: '',
 }
 
-// async sem await de propósito: o stub só precisa devolver uma Promise, como
-// os métodos reais de JwtService/PrismaService/RedisService fazem — sem isso,
-// mockResolvedValueOnce (usado mais abaixo) não teria o que sobrescrever.
-/* eslint-disable @typescript-eslint/require-await */
+/* eslint-disable @typescript-eslint/require-await -- os stubs devolvem Promise,
+   como os métodos reais de JwtService, PrismaService e RedisService. */
 const jwt = { signAsync: jest.fn(async () => 'token'), verifyAsync: jest.fn() }
-/* eslint-enable @typescript-eslint/require-await */
 
 // Contador em memória, não um mock fixo: os testes de reset e de limite por
 // IP dependem de incrWithTtl acumular por chave e de delKey zerar só a sua.
-/* eslint-disable @typescript-eslint/require-await -- assíncronas para que o
-   valor de retorno continue compatível com mockResolvedValueOnce, usado
-   abaixo por um teste já existente. */
 function createFakeRedis() {
   const counts = new Map<string, number>()
   return {
@@ -42,8 +36,6 @@ function createFakeRedis() {
     }),
   }
 }
-/* eslint-enable @typescript-eslint/require-await */
-
 let redis: ReturnType<typeof createFakeRedis>
 
 beforeEach(() => {
@@ -52,11 +44,11 @@ beforeEach(() => {
 
 const build = (found: typeof user | null) =>
   new AuthService(
-    // eslint-disable-next-line @typescript-eslint/require-await
     { user: { findUnique: jest.fn(async () => found) } } as never,
     jwt as never,
     redis as never,
   )
+/* eslint-enable @typescript-eslint/require-await */
 
 // Devolve o AppException tipado; se a promise resolver, falha nomeando o valor.
 async function captureRejection(promise: Promise<unknown>): Promise<AppException> {
