@@ -140,7 +140,9 @@ export class RequestsService {
       return {
         next,
         patch: input.decision === 'REJECT' ? { rejectionReason: input.reason } : {},
-        reason: input.decision === 'REJECT' ? (input.reason ?? null) : null,
+        // Na rejeição é o motivo (obrigatório pelo schema); na aprovação, a
+        // observação opcional de quem aprovou.
+        reason: input.reason ?? null,
       }
     })
 

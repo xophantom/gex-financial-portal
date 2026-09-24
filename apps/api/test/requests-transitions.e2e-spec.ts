@@ -245,6 +245,22 @@ describe('POST /requests/:id/decision', () => {
     })
   })
 
+  it('keeps an optional approval note in the history, not as a rejection reason', async () => {
+    const target = await freshRequest('PENDING')
+
+    const response = await decide(finance, target, {
+      decision: 'APPROVE',
+      reason: 'Conferido com o contrato',
+    }).expect(200)
+    expect((response.body as RequestResponse).rejection_reason).toBeNull()
+
+    const after = await detailOf(finance, target)
+    expect(after.history.at(-1)).toMatchObject({
+      new_status: 'APPROVED',
+      reason: 'Conferido com o contrato',
+    })
+  })
+
   it('rejects a pending request, keeping the reason on the request and in the history', async () => {
     const target = await freshRequest('PENDING')
     const reason = 'Nota emitida com o CNPJ de outra filial'

@@ -64,6 +64,28 @@ describe('createRequestSchema', () => {
     expect(() => createRequestSchema.parse(withoutDescription)).not.toThrow()
   })
 
+  // "Sem descrição" tem uma representação só no banco: NULL, nunca "".
+  it.each(['', '   '])('turns the blank description %j into an absent one', (description) => {
+    expect(createRequestSchema.parse({ ...validRequest, description }).description).toBeUndefined()
+  })
+
+  it.each(['1999-12-31', '2101-01-01', '0001-01-01'])(
+    'rejects the implausible due_date %s',
+    (due_date) => {
+      const issue = firstIssue(createRequestSchema.safeParse({ ...validRequest, due_date }))
+
+      expect(issue.path).toEqual(['due_date'])
+      expect(issue.message).toBe('Use um ano entre 2000 e 2100')
+    },
+  )
+
+  it.each(['12/1999', '2101-01'])('rejects the implausible competence %s', (competence) => {
+    const issue = firstIssue(createRequestSchema.safeParse({ ...validRequest, competence }))
+
+    expect(issue.path).toEqual(['competence'])
+    expect(issue.message).toBe('Use um ano entre 2000 e 2100')
+  })
+
   it.each(['2026-02-31', '2026-13-45', '2025-02-29'])(
     'rejects the calendar-invalid due_date %s',
     (due_date) => {
@@ -205,6 +227,10 @@ describe('listRequestsQuerySchema', () => {
     expect(issue.message).not.toMatch(ENGLISH_DEFAULT)
   })
 
+  it('treats an empty supplier search as no filter', () => {
+    expect(listRequestsQuerySchema.parse({ supplier: '  ' }).supplier).toBeUndefined()
+  })
+
   it('rejects a non-numeric page without leaking the coercion internals', () => {
     const result = listRequestsQuerySchema.safeParse({ page: 'abc' })
     const issue = firstIssue(result)
@@ -228,6 +254,21 @@ describe('decisionSchema', () => {
 
   it('does not require a reason when approving', () => {
     expect(() => decisionSchema.parse({ decision: 'APPROVE' })).not.toThrow()
+  })
+
+  it('keeps an optional note on an approval', () => {
+    expect(decisionSchema.parse({ decision: 'APPROVE', reason: ' Conferido ' }).reason).toBe(
+      'Conferido',
+    )
+  })
+
+  it('reports a single Portuguese message for a blank rejection reason', () => {
+    const result = decisionSchema.safeParse({ decision: 'REJECT', reason: '   ' })
+
+    expect(result.success).toBe(false)
+    expect(result.error?.issues.map((issue) => issue.message)).toEqual([
+      'Informe o motivo da rejeição',
+    ])
   })
 
   it('rejects a decision outside the enum with a Portuguese message', () => {
@@ -284,13 +325,41 @@ describe('localized error messages', () => {
   it('never leaks an English default message', () => {
     const issues = localizedIssues([
       { name: 'createRequestSchema', schema: createRequestSchema, input: {} },
+      { name: 'createRequestSchema (corpo nulo)', schema: createRequestSchema, input: null },
+      {
+        name: 'createRequestSchema (descrição não textual)',
+        schema: createRequestSchema,
+        input: { ...validRequest, description: 42 },
+      },
       {
         name: 'listRequestsQuerySchema',
         schema: listRequestsQuerySchema,
         input: { page: 'abc', status: 'BOGUS' },
       },
+      {
+        name: 'listRequestsQuerySchema (busca longa)',
+        schema: listRequestsQuerySchema,
+        input: { supplier: 'x'.repeat(201) },
+      },
+      {
+        name: 'listRequestsQuerySchema (busca repetida)',
+        schema: listRequestsQuerySchema,
+        input: { supplier: ['a', 'b'] },
+      },
       { name: 'decisionSchema', schema: decisionSchema, input: { decision: 'MAYBE' } },
+      {
+        name: 'decisionSchema (motivo em branco)',
+        schema: decisionSchema,
+        input: { decision: 'REJECT', reason: '   ' },
+      },
+      {
+        name: 'decisionSchema (motivo longo)',
+        schema: decisionSchema,
+        input: { decision: 'REJECT', reason: 'x'.repeat(501) },
+      },
+      { name: 'decisionSchema (corpo em lista)', schema: decisionSchema, input: [] },
       { name: 'markPaidSchema', schema: markPaidSchema, input: {} },
+      { name: 'markPaidSchema (corpo nulo)', schema: markPaidSchema, input: null },
     ])
 
     for (const { name, message } of issues) {
