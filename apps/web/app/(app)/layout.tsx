@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { AppNav } from '@/components/app-nav'
+import { Toaster } from '@/components/toaster'
 import { readSession } from '@/lib/session'
 
 // Defesa em profundidade: proxy.ts já barra /dashboard e /requests sem o
@@ -16,6 +17,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="flex min-h-full flex-1 flex-col">
       <AppNav user={session.user} />
       {children}
+      {/* Um único Toaster para todo o grupo de rotas autenticadas: a store
+          (useUiStore) é o mesmo módulo em qualquer tela, então uma
+          confirmação empilhada no detalhe sobrevive a uma navegação
+          client-side de volta para a lista. */}
+      <Toaster />
     </div>
   )
 }
