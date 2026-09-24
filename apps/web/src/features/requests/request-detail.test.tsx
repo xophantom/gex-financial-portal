@@ -91,6 +91,19 @@ describe('RequestDetail — fields', () => {
     expect(screen.getByText('Vencida')).toBeInTheDocument()
   })
 
+  // A regra é da API (PENDING ou APPROVED com vencimento passado); a tela só
+  // repete is_overdue, como a lista e o dashboard.
+  it('flags an overdue request that is already approved', () => {
+    render(
+      <RequestDetail
+        request={{ ...baseRequest, status: 'APPROVED', is_overdue: true }}
+        history={[]}
+        allowedActions={[]}
+      />,
+    )
+    expect(screen.getByText('Vencida')).toBeInTheDocument()
+  })
+
   it('does not flag a request that is not overdue', () => {
     render(<RequestDetail request={baseRequest} history={[]} allowedActions={[]} />)
     expect(screen.queryByText('Vencida')).not.toBeInTheDocument()
