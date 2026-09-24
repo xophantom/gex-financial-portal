@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { loginSchema } from '@gex/shared'
 import { NextResponse } from 'next/server'
 import { sealSession } from '@/lib/session'
@@ -28,12 +29,33 @@ export async function POST(request: Request) {
     )
   }
 
-  const upstream = await fetch(`${BASE}/auth/login`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(parsed.data),
-    cache: 'no-store',
-  })
+  let upstream: Response
+  try {
+    upstream = await fetch(`${BASE}/auth/login`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-correlation-id': randomUUID(),
+      },
+      body: JSON.stringify(parsed.data),
+      cache: 'no-store',
+    })
+  } catch {
+    // fetch() rejeita — não devolve uma Response — quando a API está fora do
+    // ar (porta fechada, DNS falho, conexão recusada). Sem este catch, essa
+    // rejeição escapava do handler como 500 do próprio Next: corpo vazio, sem
+    // content-type. O formulário chamava response.json() sobre ele e estourava
+    // um SyntaxError dentro do submit — o usuário não via mensagem nenhuma.
+    return NextResponse.json(
+      {
+        error: {
+          code: 'UPSTREAM_UNAVAILABLE',
+          message: 'Não foi possível conversar com o servidor. Tente novamente em instantes.',
+        },
+      },
+      { status: 502 },
+    )
+  }
 
   const body = await upstream.json().catch(() => null)
 
@@ -44,7 +66,11 @@ export async function POST(request: Request) {
     )
   }
 
-  await sealSession({ access_token: body.access_token, refresh_token: body.refresh_token })
+  await sealSession({
+    access_token: body.access_token,
+    refresh_token: body.refresh_token,
+    user: body.user,
+  })
 
   return NextResponse.json({ user: body.user })
 }

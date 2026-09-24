@@ -25,7 +25,10 @@ export function LoginForm() {
       body: JSON.stringify(values),
     })
 
-    const body = await response.json()
+    // .catch(() => null): um 502 do próprio BFF (API fora do ar) ou qualquer
+    // resposta sem corpo JSON não pode estourar um SyntaxError dentro do
+    // submit — isso deixaria o usuário sem NENHUMA mensagem na tela.
+    const body = await response.json().catch(() => null)
 
     if (!response.ok) {
       setServerError(body?.error?.message ?? 'Erro inesperado')

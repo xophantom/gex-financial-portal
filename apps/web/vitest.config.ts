@@ -8,6 +8,8 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./vitest.setup.ts'],
-    include: ['src/**/*.test.{ts,tsx}'],
+    // `app/**` também: as rotas do BFF (app/api/**) moram fora de src/, mas
+    // continuam código de servidor testável do mesmo jeito.
+    include: ['src/**/*.test.{ts,tsx}', 'app/**/*.test.{ts,tsx}'],
   },
 })
