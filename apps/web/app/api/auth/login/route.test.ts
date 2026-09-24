@@ -61,7 +61,7 @@ describe('POST /api/auth/login', () => {
   })
 
   it('returns a JSON, Portuguese error envelope when the API is unreachable', async () => {
-    // Reproduz o achado 3 da revisão: porta fechada / conexão recusada faz
+    // Porta fechada / conexão recusada faz
     // fetch() REJEITAR (não devolver uma Response). Sem tratar isso, essa
     // rejeição escapa do handler crua — o browser recebe um 500 sem corpo
     // JSON, e o formulário quebra tentando ler response.json().
