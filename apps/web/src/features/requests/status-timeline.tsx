@@ -1,9 +1,9 @@
 import type { StatusEventResponse } from '@gex/shared'
 import { ArrowRight } from 'lucide-react'
+import { STATUS_STYLE } from '@/components/status/status-style'
 import { formatDateTime } from '@/lib/format/dates'
 import { statusLabel } from '@/lib/format/labels'
 import { cn } from '@/lib/utils'
-import { STATUS_STYLE } from './status-style'
 
 // O campo `reason` do evento carrega o motivo numa rejeição e a referência
 // num pagamento; o rótulo diz qual dos dois é.

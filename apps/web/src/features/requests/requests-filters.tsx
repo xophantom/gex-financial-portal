@@ -9,7 +9,7 @@ import { Field, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Spinner } from '@/components/ui/spinner'
-import { STATUS_LABELS } from '@/lib/format/labels'
+import { statusLabel } from '@/lib/format/labels'
 
 // Filtros e página no mesmo useQueryStates: trocar um filtro e voltar para a
 // página 1 precisa ser UMA atualização de URL, não duas navegações.
@@ -79,7 +79,7 @@ export function RequestsFilters() {
           <NativeSelectOption value="">Todos</NativeSelectOption>
           {REQUEST_STATUSES.map((status) => (
             <NativeSelectOption key={status} value={status}>
-              {STATUS_LABELS[status]}
+              {statusLabel(status)}
             </NativeSelectOption>
           ))}
         </NativeSelect>

@@ -1,6 +1,6 @@
 import type { RequestCategory, RequestStatus, UserRole } from '@gex/shared'
 
-export const STATUS_LABELS: Record<RequestStatus, string> = {
+const STATUS_LABELS: Record<RequestStatus, string> = {
   PENDING: 'Pendente',
   APPROVED: 'Aprovada',
   REJECTED: 'Rejeitada',
@@ -9,14 +9,14 @@ export const STATUS_LABELS: Record<RequestStatus, string> = {
 
 // A API guarda a categoria como código em caixa alta; na tela ela aparece
 // como palavra comum.
-export const CATEGORY_LABELS: Record<RequestCategory, string> = {
+const CATEGORY_LABELS: Record<RequestCategory, string> = {
   SOFTWARE: 'Software',
   SERVIÇOS: 'Serviços',
   MARKETING: 'Marketing',
   INFRAESTRUTURA: 'Infraestrutura',
 }
 
-export const ROLE_LABELS: Record<UserRole, string> = {
+const ROLE_LABELS: Record<UserRole, string> = {
   REQUESTER: 'Solicitante',
   FINANCE: 'Financeiro',
 }
