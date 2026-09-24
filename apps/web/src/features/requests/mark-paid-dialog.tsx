@@ -1,11 +1,14 @@
 'use client'
 
+import { markPaidSchema, PAYMENT_REFERENCE_MAX_LENGTH } from '@gex/shared'
 import { useState } from 'react'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { formatCalendarDate } from '@/lib/format/dates'
 import { ActionDialog } from './action-dialog'
-import { useActionSubmit } from './use-action-submit'
+import { fieldErrorsFrom, issuesAsDetails, useActionSubmit } from './use-action-submit'
+
+const FIELDS = ['paid_at', 'payment_reference'] as const
 
 export interface MarkPaidDialogProps {
   requestId: string
@@ -18,8 +21,6 @@ export interface MarkPaidDialogProps {
   onSuccess: () => void
 }
 
-type FieldErrors = Partial<Record<'paid_at' | 'payment_reference', string>>
-
 // Diálogo à parte: pagar exige data e referência, que aprovar/rejeitar não pedem.
 export function MarkPaidDialog({
   requestId,
@@ -31,26 +32,26 @@ export function MarkPaidDialog({
 }: MarkPaidDialogProps) {
   const [paidAt, setPaidAt] = useState(referenceDate)
   const [paymentReference, setPaymentReference] = useState('')
-  // Erros de preenchimento ficam em cada campo; o erro da API, no alerta.
-  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
-  const { error, isSubmitting, submit } = useActionSubmit(onSuccess)
+  const { error, fieldErrors, setFieldErrors, clearFieldError, isSubmitting, submit } =
+    useActionSubmit(FIELDS, onSuccess)
 
   const handleConfirm = () => {
-    const errors: FieldErrors = {}
-    if (paidAt === '') errors.paid_at = 'Informe a data do pagamento.'
-    if (paymentReference.trim() === '')
-      errors.payment_reference = 'Informe a referência do pagamento.'
-    setFieldErrors(errors)
-    if (Object.keys(errors).length > 0) return
-
-    void submit(`/api/requests/${requestId}/mark-paid`, {
-      paid_at: paidAt,
+    // O input de data vazio vale '': como ausente, o schema pede a data em
+    // vez de reclamar do formato.
+    const parsed = markPaidSchema.safeParse({
+      paid_at: paidAt || undefined,
       payment_reference: paymentReference,
     })
+    if (!parsed.success) {
+      setFieldErrors(fieldErrorsFrom(FIELDS, issuesAsDetails(parsed.error.issues)))
+      return
+    }
+
+    void submit(`/api/requests/${requestId}/mark-paid`, parsed.data)
   }
 
-  const invalidProps = (name: keyof FieldErrors) =>
-    fieldErrors[name] ? { 'aria-invalid': true, 'aria-describedby': `${name}-error` } : {}
+  const describedBy = (name: (typeof FIELDS)[number], hint?: string) =>
+    [hint, fieldErrors[name] && `${name}-error`].filter(Boolean).join(' ') || undefined
 
   return (
     <ActionDialog
@@ -72,9 +73,12 @@ export function MarkPaidDialog({
             type="date"
             value={paidAt}
             max={referenceDate}
-            onChange={(event) => setPaidAt(event.target.value)}
-            aria-invalid={fieldErrors.paid_at ? true : undefined}
-            aria-describedby={fieldErrors.paid_at ? 'paid_at-hint paid_at-error' : 'paid_at-hint'}
+            onChange={(event) => {
+              setPaidAt(event.target.value)
+              clearFieldError('paid_at')
+            }}
+            aria-invalid={Boolean(fieldErrors.paid_at) || undefined}
+            aria-describedby={describedBy('paid_at', 'paid_at-hint')}
           />
           <FieldDescription id="paid_at-hint">
             Até hoje, {formatCalendarDate(referenceDate)}.
@@ -86,9 +90,14 @@ export function MarkPaidDialog({
           <Input
             id="payment_reference"
             placeholder="Ex.: TED 000123 ou ID do Pix"
+            maxLength={PAYMENT_REFERENCE_MAX_LENGTH}
             value={paymentReference}
-            onChange={(event) => setPaymentReference(event.target.value)}
-            {...invalidProps('payment_reference')}
+            onChange={(event) => {
+              setPaymentReference(event.target.value)
+              clearFieldError('payment_reference')
+            }}
+            aria-invalid={Boolean(fieldErrors.payment_reference) || undefined}
+            aria-describedby={describedBy('payment_reference')}
           />
           {fieldErrors.payment_reference && (
             <FieldError id="payment_reference-error">{fieldErrors.payment_reference}</FieldError>

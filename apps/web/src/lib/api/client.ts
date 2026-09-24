@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { AuthResponse, ErrorCode, ErrorEnvelope } from '@gex/shared'
+import type { AuthResponse, ErrorCode, ErrorDetail, ErrorEnvelope } from '@gex/shared'
 import { redirect } from 'next/navigation'
 import { refreshSession } from '@/lib/session/refresh'
 import { readTokens, sealSession } from '@/lib/session/server'
@@ -10,6 +10,9 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: ErrorCode,
     message: string,
+    // Erros por campo, como a API devolveu: o BFF os repassa para o
+    // formulário mostrar cada um no seu campo.
+    readonly details?: ErrorDetail[],
   ) {
     super(message)
   }
@@ -51,6 +54,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
       response.status,
       body?.error?.code ?? 'INTERNAL_ERROR',
       body?.error?.message ?? 'Erro inesperado',
+      body?.error?.details,
     )
   }
 

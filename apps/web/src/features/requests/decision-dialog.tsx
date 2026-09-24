@@ -1,13 +1,15 @@
 'use client'
 
-import type { DecisionInput } from '@gex/shared'
+import { DECISION_REASON_MAX_LENGTH, decisionSchema, type DecisionInput } from '@gex/shared'
 import { useState } from 'react'
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
 import { Textarea } from '@/components/ui/textarea'
 import { ActionDialog } from './action-dialog'
-import { useActionSubmit } from './use-action-submit'
+import { fieldErrorsFrom, issuesAsDetails, useActionSubmit } from './use-action-submit'
 
 type Decision = DecisionInput['decision']
+
+const FIELDS = ['reason'] as const
 
 export interface DecisionDialogProps {
   requestId: string
@@ -29,21 +31,19 @@ export function DecisionDialog({
   onSuccess,
 }: DecisionDialogProps) {
   const [reason, setReason] = useState('')
-  // Erro de preenchimento fica no campo; o erro da API, no alerta do diálogo.
-  const [reasonError, setReasonError] = useState<string | null>(null)
-  const { error, isSubmitting, submit } = useActionSubmit(onSuccess)
+  const { error, fieldErrors, setFieldErrors, clearFieldError, isSubmitting, submit } =
+    useActionSubmit(FIELDS, onSuccess)
   const isReject = decision === 'REJECT'
 
   const handleConfirm = () => {
-    if (isReject && reason.trim() === '') {
-      setReasonError('Informe o motivo da rejeição.')
+    // O mesmo schema que a API aplica: a regra do motivo mora num lugar só.
+    const parsed = decisionSchema.safeParse({ decision, reason })
+    if (!parsed.success) {
+      setFieldErrors(fieldErrorsFrom(FIELDS, issuesAsDetails(parsed.error.issues)))
       return
     }
 
-    void submit(`/api/requests/${requestId}/decision`, {
-      decision,
-      reason: isReject ? reason : undefined,
-    })
+    void submit(`/api/requests/${requestId}/decision`, parsed.data)
   }
 
   return (
@@ -62,26 +62,27 @@ export function DecisionDialog({
       isSubmitting={isSubmitting}
       onConfirm={handleConfirm}
     >
-      {isReject && (
-        <Field data-invalid={Boolean(reasonError) || undefined}>
-          <FieldLabel htmlFor="reason">Motivo</FieldLabel>
-          <Textarea
-            id="reason"
-            rows={3}
-            value={reason}
-            onChange={(event) => {
-              setReason(event.target.value)
-              setReasonError(null)
-            }}
-            aria-invalid={Boolean(reasonError) || undefined}
-            aria-describedby={reasonError ? 'reason-hint reason-error' : 'reason-hint'}
-          />
-          <FieldDescription id="reason-hint">
-            Ex.: nota emitida com CNPJ de outra filial.
-          </FieldDescription>
-          {reasonError && <FieldError id="reason-error">{reasonError}</FieldError>}
-        </Field>
-      )}
+      <Field data-invalid={Boolean(fieldErrors.reason) || undefined}>
+        <FieldLabel htmlFor="reason">{isReject ? 'Motivo' : 'Observação (opcional)'}</FieldLabel>
+        <Textarea
+          id="reason"
+          rows={3}
+          maxLength={DECISION_REASON_MAX_LENGTH}
+          value={reason}
+          onChange={(event) => {
+            setReason(event.target.value)
+            clearFieldError('reason')
+          }}
+          aria-invalid={Boolean(fieldErrors.reason) || undefined}
+          aria-describedby={fieldErrors.reason ? 'reason-hint reason-error' : 'reason-hint'}
+        />
+        <FieldDescription id="reason-hint">
+          {isReject
+            ? 'Ex.: nota emitida com CNPJ de outra filial.'
+            : 'Fica registrada no histórico da solicitação.'}
+        </FieldDescription>
+        {fieldErrors.reason && <FieldError id="reason-error">{fieldErrors.reason}</FieldError>}
+      </Field>
     </ActionDialog>
   )
 }

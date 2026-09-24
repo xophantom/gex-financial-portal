@@ -71,6 +71,45 @@ describe('MarkPaidDialog', () => {
     resolve({ ok: true, json: async () => ({}) } as Response)
   })
 
+  // A regra de datas é da API; o erro dela aparece no campo a que se refere.
+  it('shows a field error from the API on the date field', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: false,
+      status: 422,
+      json: async () => ({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message:
+            'A data de pagamento não pode ser anterior à criação da solicitação (10/08/2026)',
+          details: [
+            {
+              field: 'paid_at',
+              message:
+                'A data de pagamento não pode ser anterior à criação da solicitação (10/08/2026)',
+            },
+          ],
+        },
+      }),
+    } as Response)
+
+    renderDialog()
+    await userEvent.type(screen.getByLabelText(/referência/i), 'PAG-2026-0099')
+    await userEvent.click(confirmButton())
+
+    await waitFor(() =>
+      expect(screen.getByLabelText(/data do pagamento/i)).toHaveAccessibleDescription(
+        /anterior à criação/i,
+      ),
+    )
+    // O único alerta é o do campo, não o geral do diálogo.
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+  })
+
+  it('limits the payment reference to what the API accepts', () => {
+    renderDialog()
+    expect(screen.getByLabelText(/referência/i)).toHaveAttribute('maxLength', '120')
+  })
+
   it('shows the API error message', async () => {
     vi.mocked(fetch).mockResolvedValue({
       ok: false,

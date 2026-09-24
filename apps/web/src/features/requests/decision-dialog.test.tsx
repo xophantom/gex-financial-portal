@@ -21,12 +21,32 @@ function renderDialog(props: Partial<DecisionDialogProps> = {}) {
 const confirmButton = (name: 'Aprovar' | 'Rejeitar') => screen.getByRole('button', { name })
 
 describe('DecisionDialog', () => {
-  it('shows a reason field only when rejecting', () => {
+  it('asks for a required reason when rejecting and an optional note when approving', () => {
     const { rerender, props } = renderDialog()
-    expect(screen.queryByLabelText(/motivo/i)).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Observação (opcional)')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Motivo')).not.toBeInTheDocument()
 
     rerender(<DecisionDialog {...props} decision="REJECT" />)
-    expect(screen.getByLabelText(/motivo/i)).toBeInTheDocument()
+    expect(screen.getByLabelText('Motivo')).toBeInTheDocument()
+  })
+
+  it('sends the optional note with an approval, trimmed', async () => {
+    vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({}) } as Response)
+    renderDialog()
+
+    await userEvent.type(screen.getByLabelText(/observação/i), '  Conferido com o contrato ')
+    await userEvent.click(confirmButton('Aprovar'))
+
+    await waitFor(() => expect(fetch).toHaveBeenCalled())
+    expect(JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string)).toEqual({
+      decision: 'APPROVE',
+      reason: 'Conferido com o contrato',
+    })
+  })
+
+  it('limits the reason to what the API accepts', () => {
+    renderDialog({ decision: 'REJECT' })
+    expect(screen.getByLabelText('Motivo')).toHaveAttribute('maxLength', '500')
   })
 
   it('names the supplier in the description', () => {

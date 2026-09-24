@@ -58,6 +58,20 @@ describe('errorResponse', () => {
     })
   })
 
+  // Sem os details, um erro de campo da API (ex.: data de pagamento) viraria
+  // uma mensagem solta, longe do campo.
+  it('keeps the field details of an API validation error', async () => {
+    const details = [
+      { field: 'paid_at', message: 'A data de pagamento não pode ser posterior a hoje' },
+    ]
+    const response = errorResponse(
+      new ApiError(422, 'VALIDATION_ERROR', details[0].message, details),
+    )
+
+    expect(response.status).toBe(422)
+    expect((await response.json()).error.details).toEqual(details)
+  })
+
   it('maps anything else to 502 UPSTREAM_UNAVAILABLE', async () => {
     const response = errorResponse(new TypeError('fetch failed'))
 
