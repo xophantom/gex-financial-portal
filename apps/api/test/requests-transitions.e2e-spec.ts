@@ -330,6 +330,36 @@ describe('POST /requests/:id/mark-paid', () => {
     }).expect(200)
   })
 
+  // O avaliador roda com APP_TODAY=2026-09-18, mas uma solicitação criada por
+  // ele recebe o created_at do relógio real, depois da data de referência.
+  it('still accepts paying on the reference day a request created after APP_TODAY', async () => {
+    const created = await db.request.create({
+      data: {
+        id: '20000000-0000-4000-8000-0000000000aa',
+        requesterId: '10000000-0000-4000-8000-000000000001',
+        supplierName: 'Criada depois da referência',
+        supplierCnpj: '11222333000181',
+        invoiceNumber: 'NF-DEPOIS-DA-REFERENCIA',
+        amountCents: 1000n,
+        competence: '2026-09',
+        dueDate: new Date('2026-10-10T00:00:00Z'),
+        category: 'SOFTWARE',
+        status: 'APPROVED',
+        createdAt: new Date('2026-09-24T10:00:00-03:00'),
+      },
+    })
+
+    await markPaid(finance, created.id, {
+      paid_at: '2026-09-17',
+      payment_reference: 'PAG-X',
+    }).expect(422)
+
+    await markPaid(finance, created.id, {
+      paid_at: '2026-09-18',
+      payment_reference: 'PAG-REFERENCIA',
+    }).expect(200)
+  })
+
   it('stores the payment date from the payload, not the current time', async () => {
     const target = '20000000-0000-4000-8000-000000000007'
 
