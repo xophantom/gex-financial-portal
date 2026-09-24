@@ -14,7 +14,7 @@ import { withTimeout } from './common/with-timeout';
 const telemetry = setupTelemetry();
 
 // Só registra os handlers de sinal quando a telemetria está realmente
-// ativa (fix round 1, Finding 4). Duas razões para não registrar sempre:
+// ativa. Duas razões para não registrar sempre:
 // 1. Com a var de ambiente ausente, o comportamento tem que continuar
 //    idêntico ao de antes desta mudança — o smoke test e um `docker stop`
 //    comum contam com o desligamento padrão do Node (sair imediatamente).

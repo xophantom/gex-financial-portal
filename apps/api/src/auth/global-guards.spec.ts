@@ -20,14 +20,8 @@ class NakedController {
 @Module({ controllers: [NakedController] })
 class NakedModule {}
 
-// A prova exata que teria pego o Finding 4 do fix round 2: um controller sem
-// NENHUM @UseGuards, montado ao lado de AuthModule (de onde vêm os
-// APP_GUARD globais). Se a proteção continuasse "opt-in por controller" — só
-// existindo porque algum controller lembrou de declarar @UseGuards — o
-// primeiro teste abaixo falharia (200 em vez de 401), porque nada aqui pede
-// JwtGuard/RolesGuard explicitamente. PrismaService/RedisService são
-// mockados: nada aqui precisa de banco ou Redis de verdade, só da cadeia de
-// guards.
+// Um controller sem @UseGuards ao lado do AuthModule: prova que a proteção
+// vem dos APP_GUARD globais, não de cada controller lembrar de pedi-la.
 describe('global guards (default deny)', () => {
   const originalEnv = { ...process.env };
 
