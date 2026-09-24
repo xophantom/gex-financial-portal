@@ -77,13 +77,16 @@ describe('protected routes', () => {
 });
 
 // A parte que Task 10 aprendeu do jeito difícil: um guard testado isolado
-// não prova nada sobre o app rodando. Estas três provam, via HTTP de
-// verdade (guards registrados, decorator @Roles lido, filtro produzindo o
-// envelope), que RolesGuard está de fato ligado numa rota @Roles('FINANCE')
-// — se o wiring fosse removido silenciosamente, o segundo teste voltaria a
-// passar por engano e o terceiro pegaria isso.
-describe('role-based authorization on a running route', () => {
-  it('lets a FINANCE user through a FINANCE-only route', async () => {
+// não prova nada sobre o app rodando. Até a Tarefa 11, GET /requests era um
+// stub @Roles('FINANCE') que existia só para provar RolesGuard via HTTP de
+// verdade. A Tarefa 12 substituiu o stub pelo domínio real: a rota agora é
+// de ambos os papéis (FINANCE vê tudo, REQUESTER só as próprias, filtrado no
+// where() do repositório) — então "REQUESTER recebe 403" deixou de ser
+// verdade aqui, e virou o teste de escopo abaixo. A prova de RolesGuard
+// barrando por papel volta a ter onde acontecer na primeira rota
+// genuinamente FINANCE-only (aprovar/rejeitar/marcar pago).
+describe('authenticated access to a running route', () => {
+  it('lets a FINANCE user through', async () => {
     const token = await app.tokenFor('financeiro@gex.test', 'GexFinance123!');
 
     await request(app.server)
@@ -92,19 +95,16 @@ describe('role-based authorization on a running route', () => {
       .expect(200);
   });
 
-  it('refuses a REQUESTER on a FINANCE-only route with 403', async () => {
+  it('lets a REQUESTER through, scoped to their own requests', async () => {
     const token = await app.tokenFor(
       'solicitante@gex.test',
       'GexRequester123!',
     );
 
-    const response = await request(app.server)
+    await request(app.server)
       .get('/requests')
       .set('Authorization', `Bearer ${token}`)
-      .expect(403);
-
-    const body = response.body as ErrorBody;
-    expect(body.error.code).toBe('FORBIDDEN');
+      .expect(200);
   });
 
   it('refuses a request signed with the wrong secret', async () => {

@@ -1,7 +1,15 @@
 import { CallHandler, ExecutionContext, NestInterceptor } from '@nestjs/common';
 import { Observable, map } from 'rxjs';
 
-function convert(value: unknown): unknown {
+// Exportada para o idempotency.service.ts reusar: o payload que ele grava no
+// Redis é o mesmo objeto de resposta do service, com amount_cents ainda em
+// BigInt (a conversão para Number só acontece aqui, no interceptor, depois
+// que o controller devolve). JSON.stringify não serializa BigInt — sem
+// converter antes de gravar, um replay de Idempotency-Key derruba a
+// requisição com 500. Reaproveitar esta função, em vez de escrever uma
+// segunda conversão, é o que garante que a resposta original e a repetida
+// carreguem exatamente o mesmo número.
+export function convert(value: unknown): unknown {
   if (typeof value === 'bigint') {
     // Estourar em silêncio seria pior: um valor truncado vira dinheiro errado
     // que ninguém percebe, enquanto a exceção aparece no primeiro teste. O
