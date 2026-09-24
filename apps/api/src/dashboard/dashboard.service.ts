@@ -1,10 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { ClockService } from '../clock/clock.service';
+import { convert } from '../common/bigint.interceptor';
 import { RedisService } from '../redis/redis.service';
 import type { Viewer } from '../requests/requests.repository';
 import { DashboardRepository } from './dashboard.repository';
 
 const CACHE_TTL_SECONDS = 60;
+
+// Sem TTL (ver RedisService.incr): esta chave é um contador que nunca pode
+// reiniciar sozinho, ou uma leitura em voo capturaria uma geração "alta" de
+// antes do reset que nunca mais bateria com a baixa atual.
+const GENERATION_KEY = 'dashboard:generation';
 
 export interface DashboardSummary {
   reference_date: string;
@@ -29,15 +35,24 @@ export class DashboardService {
     private readonly redis: RedisService,
   ) {}
 
-  async summary(viewer: Viewer): Promise<DashboardSummary> {
+  async summary(viewer: Viewer) {
     const today = this.clock.today();
-    // A chave carrega role + id + data, nunca só um deles: o vazamento da
-    // Tarefa 13 aconteceu porque uma chave de cache dependia só do valor
-    // enviado pelo cliente, sem o dono. Aqui o id sozinho distingue os dois
-    // solicitantes (dois ids nunca colidem no schema atual), e o role
-    // garante que uma entrada nunca é lida como se fosse de outro papel —
-    // mesmo que, no futuro, um id deixe de ser exclusivo de um único papel.
-    const key = `dashboard:${viewer.role}:${viewer.id}:${today}`;
+
+    // A geração é capturada ANTES da consulta agregada e entra na chave,
+    // além de role+id+data (a chave sem geração já fechava o vazamento
+    // entre viewers da Tarefa 13 — isto fecha uma janela diferente: uma
+    // escrita que commita e invalida ENQUANTO esta consulta está em voo, e
+    // que faria este método gravar no cache um total de antes dela mesma
+    // — ver invalidate() abaixo para o porquê disto ser suficiente sem
+    // precisar reconferir nada depois de calcular `summary`). Role + id +
+    // data, nunca só um deles: o vazamento da Tarefa 13 aconteceu porque a
+    // chave dependia só do valor enviado pelo cliente, sem o dono. O id
+    // sozinho já distingue os dois solicitantes (dois ids nunca colidem no
+    // schema atual), e o role garante que uma entrada nunca é lida como se
+    // fosse de outro papel — mesmo que, no futuro, um id deixe de ser
+    // exclusivo de um único papel.
+    const generation = (await this.redis.get(GENERATION_KEY)) ?? '0';
+    const key = `dashboard:${viewer.role}:${viewer.id}:${today}:${generation}`;
     const cached = await this.redis.get(key);
 
     if (cached) return JSON.parse(cached) as DashboardSummary;
@@ -49,33 +64,62 @@ export class DashboardService {
       this.clock.timezone(),
     );
 
-    const summary: DashboardSummary = {
+    // Os campos ficam BigInt aqui de propósito, como amount_cents em
+    // RequestsService.toResponse(): só o BigIntInterceptor global (resposta
+    // HTTP) ou convert() logo abaixo (gravação no Redis) fazem a conversão
+    // para Number — nunca Number(bigint) direto. Number(bigint) arredonda
+    // em silêncio acima de Number.MAX_SAFE_INTEGER em vez de lançar, que é
+    // exatamente a armadilha que BigIntInterceptor.convert() existe para
+    // fechar (Tarefa 7) e que idempotency.service.ts já evita do mesmo
+    // jeito antes de gravar no Redis.
+    const summary = {
       reference_date: today,
-      pending_amount_cents: Number(row.pending_amount_cents),
-      approved_amount_cents: Number(row.approved_amount_cents),
-      paid_this_month_amount_cents: Number(row.paid_this_month_amount_cents),
-      overdue_count: Number(row.overdue_count),
-      request_count: Number(row.request_count),
+      pending_amount_cents: row.pending_amount_cents,
+      approved_amount_cents: row.approved_amount_cents,
+      paid_this_month_amount_cents: row.paid_this_month_amount_cents,
+      overdue_count: row.overdue_count,
+      request_count: row.request_count,
       status_counts: {
-        PENDING: Number(row.pending_count),
-        APPROVED: Number(row.approved_count),
-        REJECTED: Number(row.rejected_count),
-        PAID: Number(row.paid_count),
+        PENDING: row.pending_count,
+        APPROVED: row.approved_count,
+        REJECTED: row.rejected_count,
+        PAID: row.paid_count,
       },
     };
 
-    await this.redis.setNx(key, JSON.stringify(summary), CACHE_TTL_SECONDS);
+    // Sem reconferir a geração aqui de propósito: a chave já carrega a
+    // geração capturada ANTES da consulta acima, e um "reconfere e só grava
+    // se não mudou" ainda teria seu próprio intervalo entre o reconfere e o
+    // setNx — sempre sobra uma folga do tipo tempo-de-checagem-para-uso não
+    // importa quantas vezes se reconfira. Gravar incondicionalmente sob a
+    // chave `key` (já rotulada com a geração antiga, se foi o caso) é o que
+    // fecha a janela de verdade: se um invalidate() rodou enquanto esta
+    // consulta estava em voo, esta escrita cai numa chave que a geração
+    // NOVA nunca mais vai procurar — a leitura desatualizada não deixa de
+    // ser calculada, mas fica impedida de ser servida a mais ninguém, que é
+    // a garantia que importa.
+    await this.redis.setNx(
+      key,
+      JSON.stringify(convert(summary)),
+      CACHE_TTL_SECONDS,
+    );
 
     return summary;
   }
 
-  // Padrão, não chave exata: uma escrita de um único viewer muda o que
-  // TODOS os outros veem (financeiro enxerga o total global; um requester
-  // que cria/tem uma solicitação decidida muda tanto o próprio recorte
-  // quanto o de financeiro) — não existe um conjunto pequeno e conhecido de
-  // chaves exatas para apagar aqui, então este é o caso legítimo de del()
-  // por padrão descrito em redis.service.ts (SCAN, nunca KEYS).
+  // Incrementa a geração em vez de apagar chaves por padrão. Apagar (a
+  // versão original deste método) só fecha a janela até a PRÓXIMA entrada
+  // ser gravada — e é exatamente uma entrada gravada depois do delete, mas
+  // calculada com dados de antes da escrita, que vazava um total
+  // desatualizado por até 60s (fix round 1, achado do revisor). Incrementar
+  // a geração faz qualquer consulta já em voo, mesmo que termine depois,
+  // gravar sob uma chave que a geração nova nunca mais consulta — a leitura
+  // desatualizada não é impedida de acontecer, mas é impedida de ser
+  // servida a mais alguém. As entradas da geração antiga não ficam mais
+  // alcançáveis por nenhum leitor futuro e caem sozinhas do TTL de 60s: não
+  // sobra necessidade de um del(pattern) aqui, só memória que o TTL já
+  // libera.
   async invalidate(): Promise<void> {
-    await this.redis.del('dashboard:*');
+    await this.redis.incr(GENERATION_KEY);
   }
 }

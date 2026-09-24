@@ -1,5 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { PrismaClient } from '@prisma/client';
+import argon2 from 'argon2';
 import request from 'supertest';
 import { createTestApp, TestApp } from './helpers';
 
@@ -39,15 +42,23 @@ let app: TestApp;
 let finance: string;
 let ana: string;
 let bruno: string;
+// Cliente Prisma próprio, como em requests-create.e2e-spec.ts: só para
+// inserir o usuário sem solicitações do teste de Finding 3 (não existe rota
+// de cadastro de usuário — os únicos usuários do sistema vêm do seed).
+let db: PrismaClient;
 
 beforeAll(async () => {
   app = await createTestApp();
   finance = await app.tokenFor('financeiro@gex.test', 'GexFinance123!');
   ana = await app.tokenFor('solicitante@gex.test', 'GexRequester123!');
   bruno = await app.tokenFor('outro.solicitante@gex.test', 'GexRequester456!');
+  db = new PrismaClient();
 }, 180_000);
 
-afterAll(async () => app.close());
+afterAll(async () => {
+  await db.$disconnect();
+  await app.close();
+});
 
 const summary = (token: string) =>
   request(app.server)
@@ -106,7 +117,12 @@ describe('GET /dashboard/summary for finance', () => {
   it('excludes a payment made in the previous month', async () => {
     const body = await summaryOf(finance);
     // NF-2026-1012 foi paga em 2026-08-31 e não pode entrar em "pago no mês".
-    expect(body.paid_this_month_amount_cents).toBe(841549);
+    // Lido de expected_results.json, não redigitado: o parágrafo anterior
+    // deste mesmo brief avisa contra criar uma segunda fonte da verdade, e
+    // hardcodar o número aqui seria exatamente isso (achado do revisor).
+    expect(body.paid_this_month_amount_cents).toBe(
+      expected.finance.paid_this_month_amount_cents,
+    );
   });
 });
 
@@ -133,6 +149,49 @@ describe('GET /dashboard/summary for each requester', () => {
     expect(body.pending_amount_cents).not.toBe(
       expected.finance.pending_amount_cents,
     );
+  });
+});
+
+// O seed não tem nenhum usuário sem solicitações, então o caminho
+// COALESCE(SUM(...), 0) do repository nunca era exercitado ponta a ponta —
+// só correto "por inspeção" (achado do revisor). Sem o COALESCE, SUM sobre
+// zero linhas devolve NULL, e um requester recém-criado veria
+// pending_amount_cents: null no primeiro render, quebrando qualquer soma ou
+// formatação de moeda no frontend.
+describe('GET /dashboard/summary for a requester with zero requests', () => {
+  const EMAIL = 'sem-solicitacoes@gex.test';
+  const PASSWORD = 'GexEmptyRequester123!';
+
+  it('returns zero for every indicator, never null or a missing status key', async () => {
+    // Não existe rota de cadastro de usuário no domínio — os únicos usuários
+    // vêm do seed — então o Prisma direto é o único jeito de criar uma conta
+    // sem nenhuma linha em requests para este teste.
+    await db.user.create({
+      data: {
+        id: randomUUID(),
+        name: 'Requester Sem Solicitações',
+        email: EMAIL,
+        role: 'REQUESTER',
+        passwordHash: await argon2.hash(PASSWORD, { type: argon2.argon2id }),
+      },
+    });
+
+    const token = await app.tokenFor(EMAIL, PASSWORD);
+    const body = await summaryOf(token);
+
+    expect(body).toMatchObject({
+      pending_amount_cents: 0,
+      approved_amount_cents: 0,
+      paid_this_month_amount_cents: 0,
+      overdue_count: 0,
+      request_count: 0,
+    });
+    expect(body.status_counts).toEqual({
+      PENDING: 0,
+      APPROVED: 0,
+      REJECTED: 0,
+      PAID: 0,
+    });
   });
 });
 

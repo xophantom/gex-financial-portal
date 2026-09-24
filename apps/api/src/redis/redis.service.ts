@@ -55,6 +55,17 @@ export class RedisService implements OnModuleDestroy {
     return count;
   }
 
+  // Sem TTL, ao contrário de incrWithTtl: para um contador de geração (ex.:
+  // dashboard.service.ts), a chave precisa sobreviver indefinidamente — um
+  // TTL que expirasse reiniciaria a contagem do zero, e uma leitura que
+  // capturou a geração alta de antes do reset nunca mais bateria com a
+  // baixa atual. Inofensivo por si só (o pior efeito é um cache miss a
+  // mais), mas sem necessidade nenhuma de aceitar isso quando o caso de uso
+  // é justamente "nunca reiniciar".
+  async incr(key: string): Promise<number> {
+    return this.client.incr(key);
+  }
+
   async ping(): Promise<void> {
     await this.client.ping();
   }
