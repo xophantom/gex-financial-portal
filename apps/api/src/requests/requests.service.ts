@@ -13,6 +13,7 @@ import { Prisma } from '@prisma/client';
 import { ClockService } from '../clock/clock.service';
 import { AppException } from '../common/http-exception.filter';
 import { offsetFor } from '../common/timezone';
+import { DashboardService } from '../dashboard/dashboard.service';
 import { IdempotencyService } from './idempotency.service';
 import {
   RequestsRepository,
@@ -60,6 +61,7 @@ export class RequestsService {
     private readonly repository: RequestsRepository,
     private readonly clock: ClockService,
     private readonly idempotency: IdempotencyService,
+    private readonly dashboard: DashboardService,
   ) {}
 
   async list(query: ListRequestsQuery, viewer: Viewer) {
@@ -125,6 +127,13 @@ export class RequestsService {
       );
     }
 
+    // Só no ramo de criação de verdade, nunca no replay acima (que devolve
+    // antes de chegar aqui): um replay não muda nenhuma linha em requests,
+    // então invalidar o dashboard ali seria trabalho sem efeito nenhum no
+    // agregado. Uma criação nova sempre muda pending_amount_cents — do
+    // próprio solicitante e do total que financeiro vê.
+    await this.dashboard.invalidate();
+
     return response;
   }
 
@@ -169,6 +178,12 @@ export class RequestsService {
       },
     );
 
+    // transition() só resolve depois de um UPDATE de verdade (assertTransition
+    // já teria lançado antes disso para uma transição inválida) — então
+    // chegar aqui sempre significa que pending/approved mudaram para o
+    // financeiro e para o solicitante dono da linha.
+    await this.dashboard.invalidate();
+
     return this.toResponse(updated, this.clock.today());
   }
 
@@ -190,6 +205,12 @@ export class RequestsService {
         };
       },
     );
+
+    // Mesmo raciocínio do decide() acima: só chega aqui depois de um UPDATE
+    // de verdade para PAID, que move dinheiro de approved_amount_cents para
+    // paid_this_month_amount_cents tanto para financeiro quanto para o
+    // solicitante dono da linha.
+    await this.dashboard.invalidate();
 
     return this.toResponse(updated, this.clock.today());
   }

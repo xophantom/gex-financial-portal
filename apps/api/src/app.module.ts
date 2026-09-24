@@ -4,6 +4,7 @@ import { AuthModule } from './auth/auth.module';
 import { ClockModule } from './clock/clock.module';
 import { CorrelationMiddleware } from './common/correlation.middleware';
 import { buildLogger } from './common/logger';
+import { DashboardModule } from './dashboard/dashboard.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
 import { RequestsModule } from './requests/requests.module';
@@ -17,6 +18,7 @@ import { RequestsModule } from './requests/requests.module';
     ClockModule,
     RedisModule,
     AuthModule,
+    DashboardModule,
     RequestsModule,
   ],
   controllers: [],
