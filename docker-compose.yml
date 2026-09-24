@@ -28,7 +28,7 @@ services:
     environment:
       COLLECTOR_OTLP_ENABLED: 'true'
     ports:
-      - '16686:16686'
+      - '${JAEGER_PORT:-16686}:16686'
 
   api:
     build:
