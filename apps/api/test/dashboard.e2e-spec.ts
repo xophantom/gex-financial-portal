@@ -42,9 +42,8 @@ let app: TestApp;
 let finance: string;
 let ana: string;
 let bruno: string;
-// Cliente Prisma próprio, como em requests-create.e2e-spec.ts: só para
-// inserir o usuário sem solicitações do teste de Finding 3 (não existe rota
-// de cadastro de usuário — os únicos usuários do sistema vêm do seed).
+// Prisma direto para criar um usuário sem solicitações: não há rota de
+// cadastro de usuário.
 let db: PrismaClient;
 
 beforeAll(async () => {
@@ -117,9 +116,7 @@ describe('GET /dashboard/summary for finance', () => {
   it('excludes a payment made in the previous month', async () => {
     const body = await summaryOf(finance);
     // NF-2026-1012 foi paga em 2026-08-31 e não pode entrar em "pago no mês".
-    // Lido de expected_results.json, não redigitado: o parágrafo anterior
-    // deste mesmo brief avisa contra criar uma segunda fonte da verdade, e
-    // hardcodar o número aqui seria exatamente isso (achado do revisor).
+    // O valor vem de expected_results.json para não haver duas fontes.
     expect(body.paid_this_month_amount_cents).toBe(
       expected.finance.paid_this_month_amount_cents,
     );
@@ -152,12 +149,8 @@ describe('GET /dashboard/summary for each requester', () => {
   });
 });
 
-// O seed não tem nenhum usuário sem solicitações, então o caminho
-// COALESCE(SUM(...), 0) do repository nunca era exercitado ponta a ponta —
-// só correto "por inspeção" (achado do revisor). Sem o COALESCE, SUM sobre
-// zero linhas devolve NULL, e um requester recém-criado veria
-// pending_amount_cents: null no primeiro render, quebrando qualquer soma ou
-// formatação de moeda no frontend.
+// Sem o COALESCE, SUM sobre zero linhas devolve NULL e um usuário novo veria
+// null em vez de 0; o seed não tem usuário sem solicitações.
 describe('GET /dashboard/summary for a requester with zero requests', () => {
   const EMAIL = 'sem-solicitacoes@gex.test';
   const PASSWORD = 'GexEmptyRequester123!';
@@ -195,13 +188,9 @@ describe('GET /dashboard/summary for a requester with zero requests', () => {
   });
 });
 
-// Task 13 vazou dados entre contas porque a chave de cache do idempotency
-// dependia só do valor enviado pelo cliente, sem o id do dono — e todo teste
-// de escopo até aquele ponto usava um único ator, o que tornava o vazamento
-// invisível (bate com um ator, sempre bate). Este bloco existe para não
-// repetir o erro: usa três contas reais e diferentes (financeiro + dois
-// solicitantes) e prova que nenhuma delas nunca recebe o payload de outra.
-describe('cache isolation across viewers (Task 13 regression)', () => {
+// Com um ator só, uma chave de cache sem o dono passaria despercebida; três
+// contas com dados diferentes provam que ninguém recebe o resumo de outro.
+describe('cache isolation across viewers', () => {
   it('gives each of the three viewers their own numbers, never one another’s', async () => {
     const [financeBody, anaBody, brunoBody] = await Promise.all([
       summaryOf(finance),
@@ -219,9 +208,7 @@ describe('cache isolation across viewers (Task 13 regression)', () => {
       expected.requesters[BRUNO_ID].pending_amount_cents,
     );
 
-    // As três contas têm dados diferentes no seed (ver expected_results.json);
-    // se qualquer par de payloads vier idêntico, a chave de cache colidiu
-    // entre viewers — exatamente a forma do vazamento da Tarefa 13.
+    // Payloads idênticos significariam chave de cache colidindo entre viewers.
     const payloads = [financeBody, anaBody, brunoBody];
     for (let i = 0; i < payloads.length; i += 1) {
       for (let j = i + 1; j < payloads.length; j += 1) {
