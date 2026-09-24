@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @gex/api exec prisma generate
+      - run: pnpm lint
+      - run: pnpm typecheck
+
+  test-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      # Sem "--" antes de --coverage: pnpm repassa o argumento como está
+      # escrito, e o script por trás já é "vitest run" — um "--" extra vira
+      # o separador de padrão de teste do próprio Vitest, e --coverage é
+      # engolido como filtro em vez de virar a flag que liga a cobertura.
+      - run: pnpm --filter @gex/shared test --coverage
+      - run: pnpm --filter @gex/web test
+
+  test-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @gex/api exec prisma generate
+      - run: pnpm --filter @gex/api test
+      - run: pnpm --filter @gex/api test:e2e
+
+  smoke:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16.4-alpine
+        env:
+          POSTGRES_DB: gex_finance_test
+          POSTGRES_USER: gex
+          POSTGRES_PASSWORD: gex_local_password
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://gex:gex_local_password@localhost:5432/gex_finance_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @gex/api exec prisma generate
+      - run: pnpm --filter @gex/api db:migrate
+      # O único portão que builda de verdade e sobe `node dist/...`: lint,
+      # typecheck, unitário e e2e transpilam TypeScript em tempo de execução
+      # e nunca tocam o artefato empacotado. Já pegou um binário quebrado
+      # com os outros quatro gates verdes (Task 10).
+      - run: pnpm --filter @gex/api test:smoke
+
+  build:
+    needs: [lint, test-unit, test-integration, smoke]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose build
