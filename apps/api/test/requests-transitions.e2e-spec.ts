@@ -1,5 +1,6 @@
-import type { ErrorEnvelope, RequestDetailResponse } from '@gex/shared'
-import { PrismaClient } from '@prisma/client'
+import { randomUUID } from 'node:crypto'
+import type { ErrorEnvelope, RequestDetailResponse, RequestResponse } from '@gex/shared'
+import { PrismaClient, type RequestStatus } from '@prisma/client'
 import request from 'supertest'
 import { createTestApp, TestApp } from './support/test-app'
 
@@ -10,10 +11,38 @@ let bruno: string
 // Prisma direto: conferir a corrida pela coluna crua, não pelo GET sob teste.
 let db: PrismaClient
 
+// Linhas do seed só para leituras e recusas; todo teste que muda estado usa
+// uma linha nova (freshRequest), então nenhum depende da ordem dos outros.
 const PENDING_OF_ANA = '20000000-0000-4000-8000-000000000001'
 const APPROVED_ID = '20000000-0000-4000-8000-000000000006'
 const REJECTED_ID = '20000000-0000-4000-8000-000000000015'
 const PAID_ID = '20000000-0000-4000-8000-000000000010'
+const ANA_ID = '10000000-0000-4000-8000-000000000001'
+const FINANCE_ID = '10000000-0000-4000-8000-000000000003'
+
+// Criada em agosto por padrão, antes da data de referência, para aceitar
+// datas de pagamento de setembro.
+const freshRequest = async (
+  status: RequestStatus,
+  createdAt = new Date('2026-08-01T12:00:00-03:00'),
+): Promise<string> => {
+  const created = await db.request.create({
+    data: {
+      id: randomUUID(),
+      requesterId: ANA_ID,
+      supplierName: 'Fornecedor E2E',
+      supplierCnpj: '11222333000181',
+      invoiceNumber: `NF-E2E-${randomUUID().slice(0, 8)}`,
+      amountCents: 1000n,
+      competence: '2026-09',
+      dueDate: new Date('2026-09-30T00:00:00Z'),
+      category: 'SOFTWARE',
+      status,
+      createdAt,
+    },
+  })
+  return created.id
+}
 
 beforeAll(async () => {
   app = await createTestApp()
@@ -200,7 +229,7 @@ describe('POST /requests/:id/decision', () => {
   })
 
   it('approves a pending request and appends an audit event', async () => {
-    const target = '20000000-0000-4000-8000-000000000002'
+    const target = await freshRequest('PENDING')
     const before = await detailOf(finance, target)
 
     await decide(finance, target, { decision: 'APPROVE' }).expect(200)
@@ -211,8 +240,40 @@ describe('POST /requests/:id/decision', () => {
     expect(after.history.at(-1)).toMatchObject({
       previous_status: 'PENDING',
       new_status: 'APPROVED',
-      actor: { id: '10000000-0000-4000-8000-000000000003' },
+      reason: null,
+      actor: { id: FINANCE_ID },
     })
+  })
+
+  it('rejects a pending request, keeping the reason on the request and in the history', async () => {
+    const target = await freshRequest('PENDING')
+    const reason = 'Nota emitida com o CNPJ de outra filial'
+
+    const response = await decide(finance, target, {
+      decision: 'REJECT',
+      reason: `  ${reason} `,
+    }).expect(200)
+    expect(response.body as RequestResponse).toMatchObject({
+      status: 'REJECTED',
+      rejection_reason: reason,
+    })
+
+    const after = await detailOf(finance, target)
+    expect(after.history.at(-1)).toMatchObject({
+      previous_status: 'PENDING',
+      new_status: 'REJECTED',
+      reason,
+      actor: { id: FINANCE_ID },
+    })
+    expect(after.allowed_actions).toEqual([])
+  })
+
+  it('refuses rejecting an approved request', async () => {
+    const response = await decide(finance, APPROVED_ID, {
+      decision: 'REJECT',
+      reason: 'Tarde demais',
+    }).expect(409)
+    expect((response.body as ErrorEnvelope).error.code).toBe('INVALID_TRANSITION')
   })
 
   it('refuses approving an already approved request', async () => {
@@ -230,7 +291,7 @@ describe('POST /requests/:id/decision', () => {
 
   // withHeldLock pode esperar 5s sozinho; daí o timeout maior que o do Jest.
   it('writes exactly one audit event when two approvals race', async () => {
-    const target = '20000000-0000-4000-8000-000000000003'
+    const target = await freshRequest('PENDING')
     const before = await detailOf(finance, target)
 
     const results = await withHeldLock(target, 3, () =>
@@ -312,11 +373,7 @@ describe('POST /requests/:id/mark-paid', () => {
   // A criação às 23h30 em São Paulo já é o dia seguinte em UTC: a regra tem
   // que comparar datas no fuso da aplicação, não em UTC.
   it('refuses a payment dated before the request was created, in São Paulo time', async () => {
-    const target = '20000000-0000-4000-8000-000000000008'
-    await db.request.update({
-      where: { id: target },
-      data: { createdAt: new Date('2026-08-17T23:30:00-03:00') },
-    })
+    const target = await freshRequest('APPROVED', new Date('2026-08-17T23:30:00-03:00'))
 
     const response = await markPaid(finance, target, {
       paid_at: '2026-08-16',
@@ -342,23 +399,9 @@ describe('POST /requests/:id/mark-paid', () => {
   // O avaliador roda com APP_TODAY=2026-09-18, mas uma solicitação criada por
   // ele recebe o created_at do relógio real, depois da data de referência.
   it('still accepts paying on the reference day a request created after APP_TODAY', async () => {
-    const created = await db.request.create({
-      data: {
-        id: '20000000-0000-4000-8000-0000000000aa',
-        requesterId: '10000000-0000-4000-8000-000000000001',
-        supplierName: 'Criada depois da referência',
-        supplierCnpj: '11222333000181',
-        invoiceNumber: 'NF-DEPOIS-DA-REFERENCIA',
-        amountCents: 1000n,
-        competence: '2026-09',
-        dueDate: new Date('2026-10-10T00:00:00Z'),
-        category: 'SOFTWARE',
-        status: 'APPROVED',
-        createdAt: new Date('2026-09-24T10:00:00-03:00'),
-      },
-    })
+    const target = await freshRequest('APPROVED', new Date('2026-09-24T10:00:00-03:00'))
 
-    const refused = await markPaid(finance, created.id, {
+    const refused = await markPaid(finance, target, {
       paid_at: '2026-09-17',
       payment_reference: 'PAG-X',
     }).expect(422)
@@ -366,14 +409,14 @@ describe('POST /requests/:id/mark-paid', () => {
       'Esta solicitação foi criada depois da data de referência; registre o pagamento em 18/09/2026',
     )
 
-    await markPaid(finance, created.id, {
+    await markPaid(finance, target, {
       paid_at: '2026-09-18',
       payment_reference: 'PAG-REFERENCIA',
     }).expect(200)
   })
 
   it('stores the payment date from the payload, not the current time', async () => {
-    const target = '20000000-0000-4000-8000-000000000007'
+    const target = await freshRequest('APPROVED')
 
     await markPaid(finance, target, {
       paid_at: '2026-09-15',
@@ -388,7 +431,7 @@ describe('POST /requests/:id/mark-paid', () => {
   })
 
   it('anchors a plain date at midday in São Paulo, never crossing the day', async () => {
-    const target = '20000000-0000-4000-8000-000000000009'
+    const target = await freshRequest('APPROVED')
 
     await markPaid(finance, target, {
       paid_at: '2026-09-01',
@@ -414,7 +457,7 @@ describe('POST /requests/:id/mark-paid', () => {
   })
 
   it('writes exactly one audit event when two mark-paid calls race', async () => {
-    const target = APPROVED_ID
+    const target = await freshRequest('APPROVED')
 
     const results = await withHeldLock(target, 3, () =>
       Promise.all([
