@@ -17,7 +17,7 @@ usada para os números abaixo. Na subida, a API aplica as migrations e carrega o
 seed.
 
 Se alguma porta já estiver em uso, troque só a publicada no host, por exemplo
-`POSTGRES_PORT=55432 API_PORT=3101 WEB_PORT=3100 docker compose up --build`.
+`POSTGRES_PORT=55432 API_PORT=3101 WEB_PORT=3100 JAEGER_PORT=16786 docker compose up --build`.
 
 | Serviço      | URL                        |
 | ------------ | -------------------------- |
@@ -39,7 +39,8 @@ Se alguma porta já estiver em uso, troque só a publicada no host, por exemplo
 1. Entre como `solicitante@gex.test` e cadastre uma nota em **Nova solicitação**
    (cole `1.553,13` no valor; o CNPJ aceita máscara).
 2. Entre como `financeiro@gex.test`: a visão geral mostra o que aguarda decisão.
-   Abra a solicitação, aprove e registre o pagamento com a data de 18/09/2026.
+   Abra a solicitação, aprove e registre o pagamento: a data já vem preenchida
+   com a de referência (18/09/2026), o limite para um pagamento.
 3. O histórico no detalhe registra cada transição, com autor e motivo.
 
 ## Dashboard esperado
@@ -59,7 +60,8 @@ ao estado do seed: `docker compose down -v && docker compose up --build`.
 
 ## Como testar
 
-Com Node 22 e pnpm (`corepack enable`):
+Com Node 22.12+ (a API carrega o `@gex/shared`, que é ESM, via `require`) e
+pnpm (`corepack enable`):
 
 ```bash
 pnpm install && pnpm bootstrap     # dependências, build do @gex/shared e client do Prisma
@@ -76,6 +78,9 @@ aprovações simultâneas da mesma solicitação contra a API em
 `APPROVED` gravado na aprovação — prova, rodando no terminal de quem avalia,
 que o índice único do banco e o `SELECT ... FOR UPDATE` arbitram a corrida em
 vez de deixar duas requisições concorrentes criarem ou aprovarem em duplicado.
+A demo grava uma solicitação aprovada de R$ 1.553,13: rode-a depois de conferir
+o dashboard esperado, ou volte ao seed com
+`docker compose down -v && docker compose up --build`.
 
 ## Estrutura
 
@@ -112,7 +117,8 @@ no web e no shared).
 - **Dinheiro em centavos, sempre.** `amount_cents` é inteiro do formulário ao
   banco (`BIGINT` com `CHECK > 0`); nenhuma camada usa `float`. Digitar no
   campo de valor desloca os dígitos como centavos; colar `1.553,13`,
-  `R$ 2.000,00` ou `10` passa pelo mesmo parser testado em `@gex/shared`.
+  `R$ 2.000,00` ou `10` passa pelo mesmo parser testado em `@gex/shared`. A
+  dica do campo explica a diferença.
 - **`DATE` para vencimento e competência**, não `TIMESTAMP`: a data de um
   boleto não muda com o fuso. `APP_TIMEZONE` só entra na exibição e nas regras
   de calendário ("vencida", "pago no mês").
@@ -123,7 +129,8 @@ no web e no shared).
 - **Integridade no banco, não só na API.** Índice único em (CNPJ, nota) e
   `CHECK` para valor positivo, formato da competência, motivo na rejeição e
   data/referência no pagamento. O número da nota é normalizado (trim,
-  maiúsculas) para `nf-1` e `NF-1` colidirem.
+  maiúsculas) para `nf-1` e `NF-1` colidirem. Vencimento e competência ficam
+  entre 2000 e 2100, e descrição vazia é `NULL`, nunca `""`.
 - **`SELECT ... FOR UPDATE`, não lock otimista.** Travar a linha durante a
   transição é mais simples de raciocinar do que retry com `version`; status e
   evento de auditoria são gravados na mesma transação.
@@ -131,11 +138,21 @@ no web e no shared).
   `WHERE`: o registro alheio não existe para quem pergunta.
 - **Erros num envelope único** (`{ error: { code, message, details? } }`):
   422 para qualquer dado inválido, 409 para duplicidade ou transição inválida.
+  Um único schema Zod por entrada, em `@gex/shared`, valida no formulário, no
+  BFF e na API; as mensagens são todas em português.
+- **Sessão em cookies httpOnly, identidade pela API.** O BFF guarda os tokens
+  em cookies `httpOnly` e `SameSite=Lax`, e a interface pergunta quem está
+  logado a `GET /auth/me`, sem cookie de usuário que o próprio usuário possa
+  editar. Como o Compose serve HTTP puro, ele usa `COOKIE_SECURE=false`; atrás
+  de HTTPS, use `true`.
+- **Rate limit de login antes do argon2.** 10 tentativas por e-mail e 30 falhas
+  por IP a cada 5 minutos. O BFF repassa o IP do cliente em `X-Forwarded-For`,
+  e a API só confia nesse cabeçalho vindo da rede interna.
 - **Redis é opcional.** Cacheia o dashboard, guarda chaves de idempotência e
   conta tentativas de login. Se cair, a API segue respondendo pelo banco
   (`/health` reporta `degraded`) e o rate limit de login falha aberto — o hash
-  argon2 continua encarecendo força bruta. Limitação: invalidações perdidas
-  durante a queda podem servir um resumo antigo por até 60 s após a volta.
+  argon2 continua encarecendo força bruta. Uma invalidação do cache perdida
+  durante a queda é refeita na primeira leitura depois que ele volta.
 - **Seed só cria o que falta.** Roda a cada subida do container sem desfazer
   aprovações ou pagamentos feitos durante a avaliação.
 - **Módulos desacoplados por evento.** Criar, decidir e pagar emitem
@@ -152,4 +169,20 @@ no web e no shared).
   único elemento de destaque é o carimbo de status no detalhe da solicitação.
 - **Observabilidade.** Logs estruturados (pino) com `x-correlation-id` e
   redação de credenciais e dados financeiros; traces OpenTelemetry visíveis no
-  Jaeger.
+  Jaeger, sem as chaves do Redis (que carregam e-mails).
+
+## Limitações conhecidas
+
+- **Tokens sem revogação.** Access token de 15 min e refresh token de 7 dias,
+  ambos JWT sem estado: o logout apaga os cookies, mas um refresh token vazado
+  vale até expirar. Revogar exigiria guardar os tokens emitidos (Redis ou
+  banco).
+- **Bloqueio por e-mail.** Qualquer pessoa trava o login de um e-mail por
+  5 minutos errando a senha 10 vezes; é o preço de limitar a força bruta por
+  conta.
+- **IP atrás de proxy.** O limite por IP usa o `X-Forwarded-For` que chega ao
+  web. Sem um proxy de borda que o reescreva, quem acessa o web direto pode
+  forjá-lo; o limite por e-mail continua valendo.
+- **CNPJ só numérico.** O enunciado pede 14 dígitos, então o CNPJ alfanumérico
+  (em vigor desde julho de 2026) é recusado. O `CHAR(14)` do banco já o
+  comportaria; faltaria o cálculo dos dígitos verificadores com letras.

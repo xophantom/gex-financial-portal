@@ -57,6 +57,15 @@ describe('POST /requests', () => {
     expect(created.competence).toBe('2026-09')
   })
 
+  it('stores a blank description as absent, never as an empty string', async () => {
+    const response = await post(requester, { ...body(), description: '   ' }).expect(201)
+    const created = response.body as RequestResponse
+
+    expect(created.description).toBeNull()
+    const row = await db.request.findUniqueOrThrow({ where: { id: created.id } })
+    expect(row.description).toBeNull()
+  })
+
   it('records a creation event in the audit trail', async () => {
     const createdResponse = await post(requester, body()).expect(201)
     const created = createdResponse.body as RequestResponse

@@ -76,13 +76,27 @@ function ControlledCompetenceInput() {
 }
 
 describe('CnpjInput', () => {
-  it('shows the mask once complete and hands over bare digits', async () => {
+  it('shows the full mask and hands over bare digits', async () => {
     render(<ControlledCnpjInput />)
     const input = screen.getByLabelText('CNPJ')
     await userEvent.type(input, '11.222.333/0001-81')
 
     expect(input).toHaveValue('11.222.333/0001-81')
     expect(screen.getByRole('status')).toHaveTextContent(/^11222333000181$/)
+  })
+
+  it.each([
+    ['11', '11'],
+    ['112', '11.2'],
+    ['112223', '11.222.3'],
+    ['112223330', '11.222.333/0'],
+    ['1122233300018', '11.222.333/0001-8'],
+  ])('masks the partial CNPJ %s as %s while typing', async (typed, masked) => {
+    render(<ControlledCnpjInput />)
+    await userEvent.type(screen.getByLabelText('CNPJ'), typed)
+
+    expect(screen.getByLabelText('CNPJ')).toHaveValue(masked)
+    expect(screen.getByRole('status')).toHaveTextContent(typed)
   })
 
   it('renders the design system input', () => {

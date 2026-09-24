@@ -20,6 +20,9 @@ const IP_WINDOW_SECONDS = 300
 const DUMMY_PASSWORD_HASH =
   '$argon2id$v=19$m=65536,t=3,p=4$NZgu8zFbSVZkqFpSgF0NmA$Is1czcXXrf+qFEl+t5LRNtEALabV2KLfgdtbg6nomzc'
 
+const tooManyAttempts = () =>
+  new AppException('TOO_MANY_REQUESTS', 'Muitas tentativas. Tente novamente em instantes.', 429)
+
 @Injectable()
 export class AuthService {
   // Resolvido na construção para falhar no boot sem JWT_REFRESH_SECRET; com
@@ -35,6 +38,11 @@ export class AuthService {
   // O e-mail chega normalizado (minúsculas) pelo loginSchema.
   async login(email: string, password: string, ip: string): Promise<AuthResponse> {
     const emailKey = `login:email:${email}`
+    const ipKey = `login:ip:${ip}`
+
+    // Os dois limites barram antes do argon2: checados depois, só trocariam o
+    // código de erro dos chutes errados e deixariam o chute certo entrar.
+    await this.rejectIfOverLimit(ipKey, MAX_ATTEMPTS_PER_IP)
     await this.enforceLimit(emailKey, MAX_ATTEMPTS_PER_EMAIL, EMAIL_WINDOW_SECONDS)
 
     const user = await this.prisma.user.findUnique({ where: { email } })
@@ -52,7 +60,7 @@ export class AuthService {
     if (!user || !valid) {
       // Por IP só conta falha: um escritório atrás do mesmo NAT não pode se
       // bloquear com logins que deram certo.
-      await this.enforceLimit(`login:ip:${ip}`, MAX_ATTEMPTS_PER_IP, IP_WINDOW_SECONDS)
+      await this.redis.incrWithTtl(ipKey, IP_WINDOW_SECONDS)
 
       throw new AppException('UNAUTHENTICATED', 'E-mail ou senha inválidos', 401)
     }
@@ -88,13 +96,14 @@ export class AuthService {
   private async enforceLimit(key: string, max: number, windowSeconds: number): Promise<void> {
     const attempts = await this.redis.incrWithTtl(key, windowSeconds)
 
-    if (attempts !== null && attempts > max) {
-      throw new AppException(
-        'TOO_MANY_REQUESTS',
-        'Muitas tentativas. Tente novamente em instantes.',
-        429,
-      )
-    }
+    if (attempts !== null && attempts > max) throw tooManyAttempts()
+  }
+
+  // Só lê: o contador por IP é incrementado apenas nas falhas.
+  private async rejectIfOverLimit(key: string, max: number): Promise<void> {
+    const failures = Number((await this.redis.get(key)) ?? 0)
+
+    if (failures >= max) throw tooManyAttempts()
   }
 
   // Recebe a linha inteira do Prisma, mas só os campos de SessionUser saem

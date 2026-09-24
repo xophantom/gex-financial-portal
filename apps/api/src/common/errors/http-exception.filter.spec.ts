@@ -11,9 +11,8 @@ interface FakeResponse {
 
 const capture = (exception: unknown) => {
   const body: unknown[] = []
-  // Tipado como `(code: number) => FakeResponse` em vez de deixar o jest.fn()
-  // inferir `any`: mockReturnThis() ainda devolve o `this` de chamada (o
-  // próprio response), só que agora sob um tipo real, não sob any implícito.
+  // Tipado explicitamente para o jest.fn() não inferir `any`; mockReturnThis()
+  // devolve o próprio response, permitindo encadear status().json().
   const statusMock = jest.fn<FakeResponse, [number]>().mockReturnThis()
   const response: FakeResponse = {
     status: statusMock,

@@ -1,11 +1,10 @@
 import type { DashboardSummaryResponse, RequestListResponse } from '@gex/shared'
 import type { Metadata } from 'next'
-import { redirect } from 'next/navigation'
 import { Suspense } from 'react'
 import { DashboardSkeleton } from '@/features/dashboard/dashboard-skeleton'
 import { DashboardSummary } from '@/features/dashboard/dashboard-summary'
 import { apiFetchForPage } from '@/lib/api/client'
-import { readSession } from '@/lib/session/server'
+import { getSessionUser } from '@/lib/session/user'
 
 export const metadata: Metadata = { title: 'Visão geral' }
 
@@ -21,14 +20,11 @@ export default function DashboardPage() {
 }
 
 async function Summary() {
-  const [session, summary, pending] = await Promise.all([
-    readSession(),
+  const [user, summary, pending] = await Promise.all([
+    getSessionUser(),
     apiFetchForPage<DashboardSummaryResponse>('/dashboard/summary'),
     apiFetchForPage<RequestListResponse>('/requests?status=PENDING&page_size=5'),
   ])
 
-  // O layout do grupo já garante a sessão; isto só estreita o tipo.
-  if (!session) redirect('/login')
-
-  return <DashboardSummary summary={summary} pending={pending} role={session.user.role} />
+  return <DashboardSummary summary={summary} pending={pending} role={user.role} />
 }

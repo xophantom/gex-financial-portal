@@ -1,19 +1,16 @@
-import { redirect } from 'next/navigation'
 import { AppNav } from '@/components/layout/app-nav'
 import { Toaster } from '@/components/ui/sonner'
-import { readSession } from '@/lib/session/server'
+import { getSessionUser } from '@/lib/session/user'
 
 // Defesa em profundidade: o proxy (src/proxy.ts) já barra /dashboard e
-// /requests sem sessão, mas um Server Component não deve depender só do
-// matcher do proxy para decidir o que renderiza.
+// /requests sem sessão, e aqui a API confirma quem é o usuário; sem sessão
+// válida, getSessionUser leva ao login.
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const session = await readSession()
-
-  if (!session) redirect('/login')
+  const user = await getSessionUser()
 
   return (
     <div className="flex min-h-full flex-1 flex-col md:pl-64">
-      <AppNav user={session.user} />
+      <AppNav user={user} />
       <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-8 md:px-10 md:py-12">
         {children}
       </main>

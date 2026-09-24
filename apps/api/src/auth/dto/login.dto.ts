@@ -1,6 +1,6 @@
 import { loginSchema } from '@gex/shared'
 import { createZodDto } from 'nestjs-zod'
 
-// Classe só para o Swagger refletir o corpo; a validação é o próprio schema
-// Zod, aplicado pelo ZodValidationPipe no controller.
+// O DTO carrega o schema de @gex/shared: o pipe global valida com ele e o
+// Swagger o documenta.
 export class LoginDto extends createZodDto(loginSchema) {}

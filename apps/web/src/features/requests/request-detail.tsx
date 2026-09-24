@@ -39,10 +39,12 @@ export function RequestDetail({
   request,
   history,
   allowedActions,
+  referenceDate,
 }: {
   request: RequestResponse
   history: StatusEventResponse[]
   allowedActions: RequestAction[]
+  referenceDate: string
 }) {
   const router = useRouter()
   const [openDialog, setOpenDialog] = useState<RequestAction | null>(null)
@@ -60,7 +62,6 @@ export function RequestDetail({
   const canReject = allowedActions.includes('REJECT')
   const canMarkPaid = allowedActions.includes('MARK_PAID')
   const hasActions = canApprove || canReject || canMarkPaid
-  const isOverdue = request.is_overdue && request.status === 'PENDING'
 
   return (
     <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_17rem] xl:gap-14">
@@ -88,7 +89,7 @@ export function RequestDetail({
             <DataItem label="Vencimento">
               <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 {formatCalendarDate(request.due_date)}
-                {isOverdue && (
+                {request.is_overdue && (
                   <span className="rounded-sm bg-pending-soft px-1.5 py-px text-xs font-semibold text-pending">
                     Vencida
                   </span>
@@ -178,6 +179,7 @@ export function RequestDetail({
           onOpenChange={(open) => !open && closeDialog()}
           requestId={request.id}
           supplierName={request.supplier_name}
+          referenceDate={referenceDate}
           onSuccess={() => handleSuccess('MARK_PAID')}
         />
       )}

@@ -25,6 +25,9 @@ const jwt = { signAsync: jest.fn(async () => 'token'), verifyAsync: jest.fn() }
 function createFakeRedis() {
   const counts = new Map<string, number>()
   return {
+    get: jest.fn<Promise<string | null>, [string]>(async (key) =>
+      counts.has(key) ? String(counts.get(key)) : null,
+    ),
     // Mesma assinatura do real (key, ttlSeconds); o fake não expira nada.
     incrWithTtl: jest.fn<Promise<number | null>, [string, number]>(async (key) => {
       const next = (counts.get(key) ?? 0) + 1
@@ -181,6 +184,39 @@ describe('AuthService rate limiting', () => {
     await expect(svc.login('one-more@gex.test', 'wrong', IP)).rejects.toMatchObject({ status: 429 })
   })
 
+  // O limite só protege se barrar antes da verificação: senão o chute certo,
+  // vindo do mesmo IP, ainda entraria.
+  it('refuses even the correct password from an IP over the limit, without verifying it', async () => {
+    for (let i = 0; i < MAX_ATTEMPTS_PER_IP; i++) {
+      await build(null)
+        .login(`nobody-${i}@gex.test`, 'wrong', IP)
+        .catch(() => undefined)
+    }
+    const verify = jest.spyOn(argon2, 'verify')
+
+    await expect(
+      build(user).login('solicitante@gex.test', 'GexRequester123!', IP),
+    ).rejects.toMatchObject({ status: 429 })
+    expect(verify).not.toHaveBeenCalled()
+
+    verify.mockRestore()
+  })
+
+  it('keeps other IPs unaffected by one IP over the limit', async () => {
+    for (let i = 0; i < MAX_ATTEMPTS_PER_IP; i++) {
+      await build(null)
+        .login(`nobody-${i}@gex.test`, 'wrong', IP)
+        .catch(() => undefined)
+    }
+
+    const result = await build(user).login(
+      'solicitante@gex.test',
+      'GexRequester123!',
+      '198.51.100.7',
+    )
+    expect(result.access_token).toBe('token')
+  })
+
   // Um escritório atrás do mesmo NAT não pode se bloquear com logins válidos.
   it('does not count a successful login against the per-IP limit', async () => {
     for (let i = 0; i < MAX_ATTEMPTS_PER_IP - 1; i++) {
@@ -213,6 +249,7 @@ describe('AuthService with Redis unavailable', () => {
   // incrWithTtl devolve null quando o Redis não responde: fail-open.
   it('still logs in without a rate-limit count', async () => {
     redis.incrWithTtl.mockResolvedValue(null)
+    redis.get.mockResolvedValue(null)
 
     const result = await build(user).login('solicitante@gex.test', 'GexRequester123!', IP)
 

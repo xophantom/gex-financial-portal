@@ -59,12 +59,18 @@ export function upstreamUnavailable(): NextResponse {
   )
 }
 
-// Repassa o erro da API com o mesmo status e envelope; qualquer outra falha
-// é tratada como API indisponível.
+// Repassa o erro da API com o mesmo status e envelope, details incluídos;
+// qualquer outra falha é tratada como API indisponível.
 export function errorResponse(error: unknown): NextResponse {
   if (error instanceof ApiError) {
     return NextResponse.json<ErrorEnvelope>(
-      { error: { code: error.code, message: error.message } },
+      {
+        error: {
+          code: error.code,
+          message: error.message,
+          ...(error.details && { details: error.details }),
+        },
+      },
       { status: error.status },
     )
   }

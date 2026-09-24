@@ -96,6 +96,11 @@ async function main(): Promise<void> {
   }
 
   await duplicateApproval(finance, created.id)
+
+  console.log(
+    '\nA demo gravou uma solicitação aprovada de R$ 1.553,13: os totais do dashboard mudaram.' +
+      '\nPara voltar ao seed: docker compose down -v && docker compose up --build',
+  )
 }
 
 main().catch((error: unknown) => {

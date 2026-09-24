@@ -151,12 +151,9 @@ describe('GET /requests filters', () => {
     const response = await list(finance, '?page_size=100').expect(200)
     const body = response.body as RequestListResponse
 
-    // Deriva o conjunto esperado do fixture cru, reaplicando a regra do
-    // domínio (não chamando o código sob teste): um total de 4 aqui não
-    // prova nada sobre QUAIS 4 — um off-by-one na fronteira da data, ou
-    // comparar contra created_at em vez de due_date, ainda produziria 4
-    // linhas, só que as erradas, e o teste antigo (toHaveLength(4)) passaria
-    // do mesmo jeito.
+    // Compara QUAIS linhas estão vencidas, reaplicando a regra sobre o
+    // fixture cru: um off-by-one na data ainda daria 4 linhas, só que as
+    // erradas.
     const expectedOverdueInvoiceNumbers = readSeedRequests()
       .filter(
         (row) =>
@@ -202,7 +199,7 @@ describe('GET /requests pagination has a total order', () => {
     prisma = new PrismaClient()
 
     // Mesmo due_date e mesmo created_at para todas: sem um desempate único
-    // no ORDER BY, essas linhas empatam nas duas colunas usadas hoje.
+    // no ORDER BY, essas linhas empatam nas duas primeiras colunas da ordem.
     const dueDate = new Date('2099-01-01T00:00:00Z')
     const createdAt = new Date('2099-01-01T00:00:00.000Z')
 

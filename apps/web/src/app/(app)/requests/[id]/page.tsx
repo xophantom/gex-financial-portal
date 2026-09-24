@@ -60,6 +60,7 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
         request={request}
         history={detail.history}
         allowedActions={detail.allowed_actions}
+        referenceDate={detail.reference_date}
       />
     </>
   )

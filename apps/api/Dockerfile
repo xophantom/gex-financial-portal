@@ -18,7 +18,8 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/web/package.json apps/web/package.json
 COPY packages/shared/package.json packages/shared/package.json
-RUN pnpm install --frozen-lockfile
+# Só a API e o que ela usa (@gex/shared): Next e React ficam fora da imagem.
+RUN pnpm install --frozen-lockfile --filter @gex/api...
 
 FROM deps AS build
 COPY . .
@@ -32,8 +33,10 @@ FROM base AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 # Copia a árvore de build inteira, node_modules incluído: recriar à mão os
-# symlinks do workspace pnpm é frágil. Custa uma imagem maior.
-COPY --from=build /app /app
+# symlinks do workspace pnpm é frágil. O processo roda sem privilégios, como
+# o usuário node da imagem base.
+COPY --from=build --chown=node:node /app /app
+USER node
 WORKDIR /app/apps/api
 
 EXPOSE 3001

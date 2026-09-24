@@ -16,6 +16,10 @@ const GENERATION_KEY = 'dashboard:generation'
 
 @Injectable()
 export class DashboardService {
+  // Uma escrita não conseguiu invalidar (Redis fora): o cache de antes da
+  // queda continua lá, então a próxima leitura invalida antes de usá-lo.
+  private invalidationPending = false
+
   constructor(
     private readonly repository: DashboardRepository,
     private readonly clock: ClockService,
@@ -30,7 +34,7 @@ export class DashboardService {
     // gravado numa chave que ninguém mais vai ler. INCRBY 0 lê criando a
     // chave em 0; null significa Redis fora, e aí não há cache nenhum —
     // adivinhar a geração poderia servir uma entrada antiga.
-    const generation = await this.redis.incrBy(GENERATION_KEY, 0)
+    const generation = await this.currentGeneration()
     const key =
       generation === null ? null : `dashboard:${viewer.role}:${viewer.id}:${today}:${generation}`
 
@@ -70,10 +74,18 @@ export class DashboardService {
   }
 
   // Muda a geração em vez de apagar chaves: entradas antigas ficam
-  // inalcançáveis e expiram pelo TTL. Com o Redis fora o INCR se perde, e o
-  // pior caso é o cache antigo durar até o fim do TTL quando ele voltar.
+  // inalcançáveis e expiram pelo TTL.
   @OnEvent(REQUESTS_CHANGED)
   async invalidate(): Promise<void> {
-    await this.redis.incrBy(GENERATION_KEY, 1)
+    const generation = await this.redis.incrBy(GENERATION_KEY, 1)
+    if (generation === null) this.invalidationPending = true
+  }
+
+  private async currentGeneration(): Promise<number | null> {
+    if (!this.invalidationPending) return this.redis.incrBy(GENERATION_KEY, 0)
+
+    const generation = await this.redis.incrBy(GENERATION_KEY, 1)
+    if (generation !== null) this.invalidationPending = false
+    return generation
   }
 }

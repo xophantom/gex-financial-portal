@@ -11,10 +11,8 @@ export class JwtGuard extends AuthGuard('jwt') {
     super()
   }
 
-  // JwtGuard agora é global (APP_GUARD): toda rota é protegida por padrão.
-  // @Public() é a única saída deliberada — sem checá-la aqui, POST
-  // /auth/login e /auth/refresh ficariam presos atrás da própria
-  // autenticação que eles existem para conceder.
+  // Global (APP_GUARD): toda rota exige token, exceto as marcadas com
+  // @Public(), como login e refresh, que existem para emiti-lo.
   canActivate(context: ExecutionContext) {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
@@ -26,10 +24,9 @@ export class JwtGuard extends AuthGuard('jwt') {
     return super.canActivate(context)
   }
 
-  // O AuthGuard padrão do passport lança um erro genérico em inglês
-  // ("Unauthorized"); sobrescrever handleRequest garante o código explícito
-  // (UNAUTHENTICATED) e a mensagem em português exigidos pelo projeto, tanto
-  // para token ausente quanto malformado, expirado ou de um usuário apagado.
+  // Um único 401 (UNAUTHENTICATED, em português) para token ausente,
+  // malformado, expirado ou de usuário removido, no lugar do "Unauthorized"
+  // genérico do passport.
   handleRequest<TUser = AuthenticatedUser>(err: unknown, user: TUser | false): TUser {
     if (err || !user) {
       throw new AppException('UNAUTHENTICATED', 'Não autenticado', 401)

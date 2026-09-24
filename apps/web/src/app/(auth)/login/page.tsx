@@ -1,9 +1,14 @@
 import type { Metadata } from 'next'
+import { redirect } from 'next/navigation'
 import { LoginForm } from '@/features/auth/login-form'
+import { findSessionUser } from '@/lib/session/user'
 
 export const metadata: Metadata = { title: 'Entrar' }
 
-export default function LoginPage() {
+// Quem já tem sessão válida vai direto para a visão geral.
+export default async function LoginPage() {
+  if (await findSessionUser()) redirect('/dashboard')
+
   return (
     <>
       <header className="mb-8 space-y-1.5">

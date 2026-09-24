@@ -72,43 +72,30 @@ describe('allowedActionsFor', () => {
   )
 })
 
-describe('Guard: nextStatusFor invalid action', () => {
+// Valores fora da união chegam em runtime (JSON, banco): a máquina recusa em
+// vez de responder com undefined, inclusive nomes do protótipo de Object.
+describe('invalid input', () => {
   it('throws for an invalid action', () => {
-    const invalidAction = 'INVALID_ACTION' as never
-    expect(() => nextStatusFor(invalidAction)).toThrow('Ação inválida: INVALID_ACTION')
+    expect(() => nextStatusFor('INVALID_ACTION' as never)).toThrow('Ação inválida: INVALID_ACTION')
   })
+
+  it('throws for an invalid from or to status', () => {
+    expect(() => canTransition('BOGUS' as never, 'PAID')).toThrow('Status inválido: BOGUS')
+    expect(() => canTransition('PENDING', 'BOGUS' as never)).toThrow('Status inválido: BOGUS')
+  })
+
+  it.each(['constructor', 'toString', 'valueOf', 'hasOwnProperty'])(
+    'throws for the prototype name %s',
+    (name) => {
+      expect(() => nextStatusFor(name as never)).toThrow(`Ação inválida: ${name}`)
+      expect(() => canTransition(name as never, 'PAID')).toThrow(`Status inválido: ${name}`)
+      expect(() => canTransition('PENDING', name as never)).toThrow(`Status inválido: ${name}`)
+    },
+  )
 })
 
-describe('Guard: canTransition invalid statuses', () => {
-  it('throws for an invalid from status', () => {
-    const invalidStatus = 'BOGUS' as never
-    expect(() => canTransition(invalidStatus, 'PAID')).toThrow('Status inválido: BOGUS')
-  })
-
-  it('throws for an invalid to status', () => {
-    const invalidStatus = 'BOGUS' as never
-    expect(() => canTransition('PENDING', invalidStatus)).toThrow('Status inválido: BOGUS')
-  })
-})
-
-describe('Regression: existing behavior still works', () => {
-  it('still allows legal transitions', () => {
-    expect(canTransition('PENDING', 'APPROVED')).toBe(true)
-    expect(canTransition('PENDING', 'REJECTED')).toBe(true)
-    expect(canTransition('APPROVED', 'PAID')).toBe(true)
-  })
-
-  it('still offers correct actions for finance on PENDING', () => {
-    expect(allowedActionsFor('PENDING', 'FINANCE')).toEqual(['APPROVE', 'REJECT'])
-  })
-
-  it('still offers nothing to requester', () => {
-    expect(allowedActionsFor('PENDING', 'REQUESTER')).toEqual([])
-  })
-})
-
-describe('Invariant: every action is available somewhere', () => {
-  it('ensures no dead actions', () => {
+describe('actions and transitions stay consistent', () => {
+  it('makes every action available from some status', () => {
     for (const action of REQUEST_ACTIONS) {
       const available = REQUEST_STATUSES.some((status) =>
         allowedActionsFor(status, 'FINANCE').includes(action),
@@ -116,32 +103,4 @@ describe('Invariant: every action is available somewhere', () => {
       expect(available).toBe(true)
     }
   })
-})
-
-describe('Security: prototype-chain injection in nextStatusFor', () => {
-  it.each(['constructor', 'toString', 'valueOf', 'hasOwnProperty'] as const)(
-    'throws for prototype name %s',
-    (protoName) => {
-      const injected = protoName as never
-      expect(() => nextStatusFor(injected)).toThrow(`Ação inválida: ${protoName}`)
-    },
-  )
-})
-
-describe('Security: prototype-chain injection in canTransition', () => {
-  it.each(['constructor', 'toString', 'valueOf', 'hasOwnProperty'] as const)(
-    'throws for prototype name %s in from parameter',
-    (protoName) => {
-      const injected = protoName as never
-      expect(() => canTransition(injected, 'PAID')).toThrow(`Status inválido: ${protoName}`)
-    },
-  )
-
-  it.each(['constructor', 'toString', 'valueOf', 'hasOwnProperty'] as const)(
-    'throws for prototype name %s in to parameter',
-    (protoName) => {
-      const injected = protoName as never
-      expect(() => canTransition('PENDING', injected)).toThrow(`Status inválido: ${protoName}`)
-    },
-  )
 })

@@ -17,17 +17,14 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       secretOrKey: resolveJwtSecret(),
-      // Hoje só é seguro por acidente: um secretOrKey do tipo string faz o
-      // jsonwebtoken inferir só algoritmos HS*. Declarar explicitamente
-      // impede essa proteção implícita de regredir silenciosamente se o
-      // secret um dia virar um objeto/chave assimétrica.
+      // Algoritmo fixo, em vez do que o jsonwebtoken infere do tipo do
+      // segredo: trocar o segredo por uma chave não amplia o que é aceito.
       algorithms: ['HS256'],
     })
   }
 
-  // Retornar null (em vez de lançar) deixa o AuthGuard tratar "sem usuário"
-  // e "token inválido" pelo mesmo caminho, em handleRequest — um único lugar
-  // decide o formato do erro 401, em vez de duas rotas divergentes.
+  // null em vez de lançar: JwtGuard.handleRequest trata usuário removido como
+  // qualquer outro token inválido, com o mesmo 401.
   async validate(payload: JwtPayload): Promise<AuthenticatedUser | null> {
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },

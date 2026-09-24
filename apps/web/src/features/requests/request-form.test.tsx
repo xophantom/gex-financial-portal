@@ -30,6 +30,13 @@ describe('RequestForm', () => {
     expect(screen.getByLabelText(/valor/i)).toHaveValue('1.553,13')
   })
 
+  // Digitar e colar leem o mesmo texto de jeitos diferentes; a dica deixa
+  // isso explícito ao lado do campo.
+  it('explains how typed and pasted amounts are read', () => {
+    render(<RequestForm />)
+    expect(screen.getByLabelText(/valor/i)).toHaveAccessibleDescription(/centavos.*reais/i)
+  })
+
   it('masks competence as MM/AAAA', async () => {
     render(<RequestForm />)
     await userEvent.type(screen.getByLabelText(/competência/i), '092026')

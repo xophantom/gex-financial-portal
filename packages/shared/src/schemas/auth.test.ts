@@ -52,7 +52,9 @@ describe('localized error messages', () => {
   it('never leaks an English default message', () => {
     const issues = localizedIssues([
       { name: 'loginSchema', schema: loginSchema, input: {} },
+      { name: 'loginSchema (corpo nulo)', schema: loginSchema, input: null },
       { name: 'refreshSchema', schema: refreshSchema, input: {} },
+      { name: 'refreshSchema (lista)', schema: refreshSchema, input: [] },
     ])
 
     for (const { name, message } of issues) {

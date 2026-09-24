@@ -71,6 +71,22 @@ describe('POST /auth/login', () => {
   })
 })
 
+// O BFF repassa o IP de quem fez login em X-Forwarded-For; a API só confia
+// nesse cabeçalho vindo da rede interna (aqui, o loopback do supertest).
+describe('POST /auth/login rate limit per client IP', () => {
+  const attempt = (ip: string, email: string, password = 'wrong') =>
+    request(app.server).post('/auth/login').set('X-Forwarded-For', ip).send({ email, password })
+
+  it('blocks an IP after 30 failures, even with the right password, and only that IP', async () => {
+    for (let i = 0; i < 30; i++) {
+      await attempt('203.0.113.50', `nobody-${i}@gex.test`).expect(401)
+    }
+
+    await attempt('203.0.113.50', 'solicitante@gex.test', 'GexRequester123!').expect(429)
+    await attempt('203.0.113.51', 'solicitante@gex.test', 'GexRequester123!').expect(200)
+  })
+})
+
 describe('POST /auth/refresh', () => {
   it('issues a new token pair with 200', async () => {
     const login = await request(app.server)
@@ -97,6 +113,28 @@ describe('POST /auth/refresh', () => {
       expect(body.error.code).toBe('VALIDATION_ERROR')
     },
   )
+})
+
+describe('GET /auth/me', () => {
+  it('answers who the token belongs to, role included', async () => {
+    const token = await app.tokenFor('financeiro@gex.test', 'GexFinance123!')
+
+    const response = await request(app.server)
+      .get('/auth/me')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200)
+
+    expect(response.body).toEqual({
+      id: '10000000-0000-4000-8000-000000000003',
+      name: 'Fernanda Financeiro',
+      email: 'financeiro@gex.test',
+      role: 'FINANCE',
+    })
+  })
+
+  it('refuses a request without a token', async () => {
+    await request(app.server).get('/auth/me').expect(401)
+  })
 })
 
 describe('unknown routes', () => {

@@ -70,13 +70,9 @@ describe('RequestsService.create — mapping P2002 to DUPLICATE_INVOICE', () => 
     })
   })
 
-  // Regra do projeto: "não é alcançável hoje" já mordeu quatro vezes. As
-  // únicas outras constraints únicas na transação de criação são as chaves
-  // primárias (Request.id, RequestStatusEvent.id), geradas por randomUUID()
-  // e portanto praticamente nunca colidem — mas no dia em que alguém
-  // acrescentar uma nova constraint única a Request ou RequestStatusEvent,
-  // este teste é o que impede um P2002 dela de virar "nota duplicada" para
-  // o cliente.
+  // As outras constraints únicas da criação são as chaves primárias (UUID
+  // aleatório). Se surgir mais uma, um P2002 dela não pode chegar ao cliente
+  // como "nota duplicada".
   it('does not map a P2002 from a different constraint to DUPLICATE_INVOICE', async () => {
     const error = fabricateP2002(['id'])
     const service = build(() => Promise.reject(error))

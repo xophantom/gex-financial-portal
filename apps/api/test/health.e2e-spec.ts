@@ -29,11 +29,8 @@ describe('GET /health', () => {
   })
 
   it('reports degraded with 200 when only redis is down', async () => {
-    // finally, não só a última linha do it(): se a asserção abaixo lançar,
-    // um `await app.startRedis()` colocado depois dela simplesmente nunca
-    // roda, e o Redis de teste fica pausado para os its seguintes (e para
-    // o afterAll). O container tem que voltar independentemente do
-    // resultado da asserção.
+    // finally: o Redis volta mesmo se a asserção falhar; senão os testes
+    // seguintes rodariam com ele pausado.
     await app.stopRedis()
     try {
       const response = await request(app.server).get('/health').expect(200)
@@ -47,13 +44,8 @@ describe('GET /health', () => {
   })
 
   it('reports unhealthy with 503 when the database is down', async () => {
-    // Mesmo raciocínio do teste do Redis acima, e mais crítico aqui: sem o
-    // finally, uma asserção que falha deixa o Postgres de teste pausado, e
-    // o afterAll (app.close() → PrismaService.onModuleDestroy →
-    // $disconnect()) trava contra um socket congelado que nunca responde
-    // nem rejeita — foi exatamente isto que aconteceu de verdade durante
-    // este trabalho (duas vezes), exigindo `docker unpause`/`stop`/`rm`
-    // manual para destravar o Jest.
+    // finally, e aqui é crítico: com o Postgres pausado, o afterAll
+    // (app.close() → $disconnect()) travaria contra um socket congelado.
     await app.stopDatabase()
     try {
       const response = await request(app.server).get('/health').expect(503)

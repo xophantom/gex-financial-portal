@@ -259,6 +259,7 @@ function RequestFormRound({ onRestart }: { onRestart: () => void }) {
           <FormField
             name="amount_cents"
             label="Valor"
+            hint="Digitando, os dois últimos dígitos são os centavos. Colando, o texto é lido em reais."
             error={errorFor('amount_cents')}
             className="@xl:col-span-3"
           >
@@ -277,7 +278,7 @@ function RequestFormRound({ onRestart }: { onRestart: () => void }) {
                     ref={field.ref}
                     className={cn(CONTROL, 'pl-9 text-right font-medium tabular-nums')}
                     placeholder="0,00"
-                    {...fieldProps('amount_cents')}
+                    {...fieldProps('amount_cents', true)}
                     value={field.value}
                     onChange={field.onChange}
                     onBlur={field.onBlur}
