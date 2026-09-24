@@ -63,9 +63,13 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return this.attempt(
       'INCR',
       async () => {
-        const count = await this.client.incr(key)
-        if (count === 1) await this.client.expire(key, ttlSeconds)
-        return count
+        // Numa transação só: com INCR e EXPIRE separados, uma falha entre os
+        // dois deixaria o contador sem TTL, e o bloqueio nunca expiraria. NX
+        // mantém a janela já aberta em vez de estendê-la a cada tentativa.
+        const results = await this.client.multi().incr(key).expire(key, ttlSeconds, 'NX').exec()
+        const [error, count] = results?.[0] ?? [new Error('transação sem resposta'), null]
+        if (error) throw error
+        return count as number
       },
       null,
     )
