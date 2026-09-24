@@ -1,0 +1,51 @@
+{
+  "reference_date": "2026-09-18",
+  "timezone": "America/Sao_Paulo",
+  "finance": {
+    "request_count": 16,
+    "status_counts": {
+      "PENDING": 5,
+      "APPROVED": 4,
+      "REJECTED": 2,
+      "PAID": 5
+    },
+    "pending_amount_cents": 875049,
+    "approved_amount_cents": 658599,
+    "paid_this_month_amount_cents": 841549,
+    "overdue_count": 4
+  },
+  "requesters": {
+    "10000000-0000-4000-8000-000000000001": {
+      "request_count": 8,
+      "status_counts": {
+        "PENDING": 3,
+        "APPROVED": 2,
+        "REJECTED": 1,
+        "PAID": 2
+      },
+      "pending_amount_cents": 194999,
+      "approved_amount_cents": 228500,
+      "paid_this_month_amount_cents": 273549,
+      "overdue_count": 2
+    },
+    "10000000-0000-4000-8000-000000000002": {
+      "request_count": 8,
+      "status_counts": {
+        "PENDING": 2,
+        "APPROVED": 2,
+        "REJECTED": 1,
+        "PAID": 3
+      },
+      "pending_amount_cents": 680050,
+      "approved_amount_cents": 430099,
+      "paid_this_month_amount_cents": 568000,
+      "overdue_count": 2
+    }
+  },
+  "money_parse_examples": {
+    "1.553,13": 155313,
+    "0,01": 1,
+    "10": 1000,
+    "R$ 2.000,00": 200000
+  }
+}
