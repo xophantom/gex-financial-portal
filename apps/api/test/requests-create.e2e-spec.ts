@@ -1,45 +1,20 @@
-import { randomUUID } from 'node:crypto';
-import { PrismaClient } from '@prisma/client';
-import request from 'supertest';
-import { createTestApp, TestApp } from './helpers';
+import { randomUUID } from 'node:crypto'
+import type {
+  ErrorEnvelope,
+  RequestDetailResponse,
+  RequestListResponse,
+  RequestResponse,
+} from '@gex/shared'
+import { PrismaClient } from '@prisma/client'
+import request from 'supertest'
+import { createTestApp, TestApp } from './support/test-app'
 
-let app: TestApp;
-let requester: string;
-let finance: string;
-let bruno: string;
+let app: TestApp
+let requester: string
+let finance: string
+let bruno: string
 // Prisma direto: conferir a corrida pela coluna crua, não pela leitura sob teste.
-let db: PrismaClient;
-
-interface CreatedRequest {
-  id: string;
-  amount_cents: number;
-  status: string;
-  supplier_cnpj: string;
-  invoice_number: string;
-  competence: string;
-  requester: { id: string; name: string };
-}
-
-interface HistoryEvent {
-  previous_status: string | null;
-  new_status: string;
-}
-
-interface RequestDetail {
-  history: HistoryEvent[];
-}
-
-interface ErrorBody {
-  error: {
-    code: string;
-    message: string;
-    details?: { field: string; message: string }[];
-  };
-}
-
-interface RequestListBody {
-  data: { invoice_number: string }[];
-}
+let db: PrismaClient
 
 const body = () => ({
   supplier_name: 'Fornecedor Teste',
@@ -50,110 +25,102 @@ const body = () => ({
   competence: '09/2026',
   due_date: '2026-09-30',
   category: 'SOFTWARE',
-});
+})
 
 beforeAll(async () => {
-  app = await createTestApp();
-  requester = await app.tokenFor('solicitante@gex.test', 'GexRequester123!');
-  finance = await app.tokenFor('financeiro@gex.test', 'GexFinance123!');
-  bruno = await app.tokenFor('outro.solicitante@gex.test', 'GexRequester456!');
-  db = new PrismaClient();
-}, 180_000);
+  app = await createTestApp()
+  requester = await app.tokenFor('solicitante@gex.test', 'GexRequester123!')
+  finance = await app.tokenFor('financeiro@gex.test', 'GexFinance123!')
+  bruno = await app.tokenFor('outro.solicitante@gex.test', 'GexRequester456!')
+  db = new PrismaClient()
+}, 180_000)
 
 afterAll(async () => {
-  await db.$disconnect();
-  await app.close();
-});
+  await db.$disconnect()
+  await app.close()
+})
 
 const post = (token: string, payload: object, key?: string) => {
-  const call = request(app.server)
-    .post('/requests')
-    .set('Authorization', `Bearer ${token}`);
+  const call = request(app.server).post('/requests').set('Authorization', `Bearer ${token}`)
 
-  return key
-    ? call.set('Idempotency-Key', key).send(payload)
-    : call.send(payload);
-};
+  return key ? call.set('Idempotency-Key', key).send(payload) : call.send(payload)
+}
 
 describe('POST /requests', () => {
   it('creates a request and stores the amount in cents', async () => {
-    const response = await post(requester, body()).expect(201);
-    const created = response.body as CreatedRequest;
+    const response = await post(requester, body()).expect(201)
+    const created = response.body as RequestResponse
 
-    expect(created.amount_cents).toBe(155313);
-    expect(created.status).toBe('PENDING');
-    expect(created.supplier_cnpj).toBe('10000000000145');
-    expect(created.competence).toBe('2026-09');
-  });
+    expect(created.amount_cents).toBe(155313)
+    expect(created.status).toBe('PENDING')
+    expect(created.supplier_cnpj).toBe('10000000000145')
+    expect(created.competence).toBe('2026-09')
+  })
 
   it('records a creation event in the audit trail', async () => {
-    const createdResponse = await post(requester, body()).expect(201);
-    const created = createdResponse.body as CreatedRequest;
+    const createdResponse = await post(requester, body()).expect(201)
+    const created = createdResponse.body as RequestResponse
 
     const detailResponse = await request(app.server)
       .get(`/requests/${created.id}`)
       .set('Authorization', `Bearer ${requester}`)
-      .expect(200);
-    const detail = detailResponse.body as RequestDetail;
+      .expect(200)
+    const detail = detailResponse.body as RequestDetailResponse
 
-    expect(detail.history).toHaveLength(1);
+    expect(detail.history).toHaveLength(1)
     expect(detail.history[0]).toMatchObject({
       previous_status: null,
       new_status: 'PENDING',
-    });
-  });
+    })
+  })
 
   it('refuses a duplicate CNPJ and invoice number with 409', async () => {
-    const payload = body();
-    await post(requester, payload).expect(201);
+    const payload = body()
+    await post(requester, payload).expect(201)
 
-    const conflictResponse = await post(requester, payload).expect(409);
-    const conflict = conflictResponse.body as ErrorBody;
+    const conflictResponse = await post(requester, payload).expect(409)
+    const conflict = conflictResponse.body as ErrorEnvelope
 
-    expect(conflict.error.code).toBe('DUPLICATE_INVOICE');
-  });
+    expect(conflict.error.code).toBe('DUPLICATE_INVOICE')
+  })
 
   it('treats invoice numbers that differ only in case or spacing as duplicates', async () => {
-    const payload = body();
+    const payload = body()
     const created = await post(requester, {
       ...payload,
       invoice_number: payload.invoice_number.toLowerCase(),
-    }).expect(201);
-    expect((created.body as CreatedRequest).invoice_number).toBe(
+    }).expect(201)
+    expect((created.body as RequestResponse).invoice_number).toBe(
       payload.invoice_number.toUpperCase(),
-    );
+    )
 
     const conflict = await post(requester, {
       ...payload,
       invoice_number: `  ${payload.invoice_number.toUpperCase()} `,
-    }).expect(409);
-    expect((conflict.body as ErrorBody).error.code).toBe('DUPLICATE_INVOICE');
-  });
+    }).expect(409)
+    expect((conflict.body as ErrorEnvelope).error.code).toBe('DUPLICATE_INVOICE')
+  })
 
   it('creates exactly one row when two identical requests race', async () => {
-    const payload = body();
+    const payload = body()
     const results = await Promise.all([
       post(requester, payload),
       post(requester, payload),
       post(requester, payload),
       post(requester, payload),
-    ]);
+    ])
 
-    const statuses = results.map((response) => response.status).sort();
-    expect(statuses.filter((status) => status === 201)).toHaveLength(1);
-    expect(statuses.filter((status) => status === 409)).toHaveLength(3);
+    const statuses = results.map((response) => response.status).sort()
+    expect(statuses.filter((status) => status === 201)).toHaveLength(1)
+    expect(statuses.filter((status) => status === 409)).toHaveLength(3)
 
     const listResponse = await request(app.server)
-      .get(
-        `/requests?supplier=${encodeURIComponent(payload.supplier_name)}&page_size=100`,
-      )
-      .set('Authorization', `Bearer ${finance}`);
-    const list = listResponse.body as RequestListBody;
+      .get(`/requests?supplier=${encodeURIComponent(payload.supplier_name)}&page_size=100`)
+      .set('Authorization', `Bearer ${finance}`)
+    const list = listResponse.body as RequestListResponse
 
-    const matches = list.data.filter(
-      (row) => row.invoice_number === payload.invoice_number,
-    );
-    expect(matches).toHaveLength(1);
+    const matches = list.data.filter((row) => row.invoice_number === payload.invoice_number)
+    expect(matches).toHaveLength(1)
 
     // Confirmação direta na coluna, contra o índice único: o enunciado exige
     // "sem criar registro extra", e isso é uma afirmação sobre a linha no
@@ -163,8 +130,8 @@ describe('POST /requests', () => {
         supplierCnpj: '10000000000145',
         invoiceNumber: payload.invoice_number,
       },
-    });
-    expect(rows).toHaveLength(1);
+    })
+    expect(rows).toHaveLength(1)
 
     // E exatamente um evento de abertura para essa linha: duas linhas de
     // auditoria significariam duas transações de criação bem-sucedidas, ou
@@ -172,98 +139,96 @@ describe('POST /requests', () => {
     // protegendo create+evento como uma unidade atômica.
     const events = await db.requestStatusEvent.findMany({
       where: { requestId: rows[0].id },
-    });
-    expect(events).toHaveLength(1);
+    })
+    expect(events).toHaveLength(1)
     expect(events[0]).toMatchObject({
       previousStatus: null,
       newStatus: 'PENDING',
-    });
-  });
+    })
+  })
 
   it('replays the first response for a repeated Idempotency-Key', async () => {
-    const key = randomUUID();
-    const payload = body();
+    const key = randomUUID()
+    const payload = body()
 
-    const firstResponse = await post(requester, payload, key).expect(201);
-    const secondResponse = await post(requester, payload, key).expect(201);
-    const first = firstResponse.body as CreatedRequest;
-    const second = secondResponse.body as CreatedRequest;
+    const firstResponse = await post(requester, payload, key).expect(201)
+    const secondResponse = await post(requester, payload, key).expect(201)
+    const first = firstResponse.body as RequestResponse
+    const second = secondResponse.body as RequestResponse
 
-    expect(second.id).toBe(first.id);
-  });
+    expect(second.id).toBe(first.id)
+  })
 
   // Corpos diferentes: a fingerprint sozinha já impediria o replay. O teste
   // seguinte, com corpos idênticos, é o que prova o isolamento por usuário.
   it("does not leak one requester's response to another reusing the same Idempotency-Key value with a different body", async () => {
-    const key = randomUUID();
-    const anaPayload = body();
-    const brunoPayload = body();
+    const key = randomUUID()
+    const anaPayload = body()
+    const brunoPayload = body()
 
-    const anaResponse = await post(requester, anaPayload, key).expect(201);
-    const brunoResponse = await post(bruno, brunoPayload, key).expect(201);
-    const ana = anaResponse.body as CreatedRequest;
-    const brunoCreated = brunoResponse.body as CreatedRequest;
+    const anaResponse = await post(requester, anaPayload, key).expect(201)
+    const brunoResponse = await post(bruno, brunoPayload, key).expect(201)
+    const ana = anaResponse.body as RequestResponse
+    const brunoCreated = brunoResponse.body as RequestResponse
 
-    expect(brunoCreated.invoice_number).toBe(brunoPayload.invoice_number);
-    expect(brunoCreated.invoice_number).not.toBe(ana.invoice_number);
-    expect(brunoCreated.requester.id).not.toBe(ana.requester.id);
-    expect(brunoCreated.requester.id).not.toBe(ana.id);
-    expect(ana.requester.id).not.toBe(brunoCreated.id);
+    expect(brunoCreated.invoice_number).toBe(brunoPayload.invoice_number)
+    expect(brunoCreated.invoice_number).not.toBe(ana.invoice_number)
+    expect(brunoCreated.requester.id).not.toBe(ana.requester.id)
+    expect(brunoCreated.requester.id).not.toBe(ana.id)
+    expect(ana.requester.id).not.toBe(brunoCreated.id)
 
     // Ambas as linhas existem de verdade, cada uma com seu próprio evento de
     // abertura — nenhuma das duas foi silenciosamente descartada.
     const rows = await db.request.findMany({
       where: { id: { in: [ana.id, brunoCreated.id] } },
-    });
-    expect(rows).toHaveLength(2);
-  });
+    })
+    expect(rows).toHaveLength(2)
+  })
 
   // Mesmo corpo e mesma chave para outro usuário: sem a chave isolada por
   // solicitante, Bruno receberia 201 com os dados financeiros de Ana. Com
   // ela, o pedido chega ao banco e o índice único responde 409.
   it("does not replay another requester's cached response for an identical body under the same Idempotency-Key", async () => {
-    const key = randomUUID();
-    const payload = body();
+    const key = randomUUID()
+    const payload = body()
 
-    const anaResponse = await post(requester, payload, key).expect(201);
-    const ana = anaResponse.body as CreatedRequest;
+    const anaResponse = await post(requester, payload, key).expect(201)
+    const ana = anaResponse.body as RequestResponse
 
-    const brunoResponse = await post(bruno, payload, key);
-    expect(brunoResponse.status).toBe(409);
-    const brunoError = brunoResponse.body as ErrorBody;
-    expect(brunoError.error.code).toBe('DUPLICATE_INVOICE');
+    const brunoResponse = await post(bruno, payload, key)
+    expect(brunoResponse.status).toBe(409)
+    const brunoError = brunoResponse.body as ErrorEnvelope
+    expect(brunoError.error.code).toBe('DUPLICATE_INVOICE')
 
     // Nunca a resposta cacheada de Ana: nem o id, nem o dono.
-    expect(brunoResponse.body).not.toMatchObject({ id: ana.id });
-    expect(JSON.stringify(brunoResponse.body)).not.toContain(ana.requester.id);
-  });
+    expect(brunoResponse.body).not.toMatchObject({ id: ana.id })
+    expect(JSON.stringify(brunoResponse.body)).not.toContain(ana.requester.id)
+  })
 
   // Mesma chave com outro corpo é outro pedido: tem que ser criado, não
   // respondido com o replay do primeiro.
   it('does not silently drop a second request when the same key is reused with a different body', async () => {
-    const key = randomUUID();
-    const firstPayload = body();
-    const secondPayload = body();
+    const key = randomUUID()
+    const firstPayload = body()
+    const secondPayload = body()
 
-    const firstResponse = await post(requester, firstPayload, key).expect(201);
-    const secondResponse = await post(requester, secondPayload, key).expect(
-      201,
-    );
-    const first = firstResponse.body as CreatedRequest;
-    const second = secondResponse.body as CreatedRequest;
+    const firstResponse = await post(requester, firstPayload, key).expect(201)
+    const secondResponse = await post(requester, secondPayload, key).expect(201)
+    const first = firstResponse.body as RequestResponse
+    const second = secondResponse.body as RequestResponse
 
-    expect(second.id).not.toBe(first.id);
-    expect(second.invoice_number).toBe(secondPayload.invoice_number);
+    expect(second.id).not.toBe(first.id)
+    expect(second.invoice_number).toBe(secondPayload.invoice_number)
 
     const rows = await db.request.findMany({
       where: { id: { in: [first.id, second.id] } },
-    });
-    expect(rows).toHaveLength(2);
-  });
+    })
+    expect(rows).toHaveLength(2)
+  })
 
   it('refuses finance creating a request', async () => {
-    await post(finance, body()).expect(403);
-  });
+    await post(finance, body()).expect(403)
+  })
 
   it.each([
     [{ amount_cents: 0 }, 'amount_cents'],
@@ -279,10 +244,10 @@ describe('POST /requests', () => {
     const response = await post(requester, {
       ...body(),
       ...patch,
-    }).expect(422);
-    const error = response.body as ErrorBody;
+    }).expect(422)
+    const error = response.body as ErrorEnvelope
 
-    expect(error.error.code).toBe('VALIDATION_ERROR');
-    expect(error.error.details?.some((d) => d.field === field)).toBe(true);
-  });
-});
+    expect(error.error.code).toBe('VALIDATION_ERROR')
+    expect(error.error.details?.some((d) => d.field === field)).toBe(true)
+  })
+})

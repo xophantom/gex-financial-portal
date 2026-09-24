@@ -8,30 +8,23 @@ import {
   ParseUUIDPipe,
   Post,
   Query,
-} from '@nestjs/common';
-import {
-  ApiBearerAuth,
-  ApiOperation,
-  ApiQuery,
-  ApiTags,
-} from '@nestjs/swagger';
+} from '@nestjs/common'
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger'
 import {
   createRequestSchema,
   decisionSchema,
   listRequestsQuerySchema,
   markPaidSchema,
-} from '@gex/shared';
-import { CurrentUser } from '../auth/current-user.decorator';
-import { Roles } from '../auth/roles.decorator';
-import { ZodValidationPipe } from '../common/zod-validation.pipe';
-import {
-  CreateRequestDto,
-  DecisionDto,
-  ListRequestsQueryDto,
-  MarkPaidDto,
-} from './dto';
-import type { Viewer } from './requests.repository';
-import { RequestsService } from './requests.service';
+} from '@gex/shared'
+import type { AuthenticatedUser } from '../auth/authenticated-user'
+import { CurrentUser } from '../auth/decorators/current-user.decorator'
+import { Roles } from '../auth/decorators/roles.decorator'
+import { ZodValidationPipe } from '../common/http/zod-validation.pipe'
+import { CreateRequestDto } from './dto/create-request.dto'
+import { DecisionDto } from './dto/decision.dto'
+import { ListRequestsQueryDto } from './dto/list-requests-query.dto'
+import { MarkPaidDto } from './dto/mark-paid.dto'
+import { RequestsService } from './requests.service'
 
 // Sem @Roles na classe: os dois papéis usam as rotas de leitura, e o escopo
 // (tudo ou só as próprias) é decidido no repositório. @ApiBearerAuth() põe o
@@ -47,27 +40,24 @@ export class RequestsController {
   // validação continua sendo o schema Zod.
   @Get()
   @ApiOperation({
-    description:
-      'due_from não pode ser posterior a due_to, quando os dois forem informados.',
+    description: 'due_from não pode ser posterior a due_to, quando os dois forem informados.',
   })
   @ApiQuery({
     name: 'due_from',
     required: false,
-    description:
-      'Data no formato AAAA-MM-DD; precisa ser uma data real do calendário',
+    description: 'Data no formato AAAA-MM-DD; precisa ser uma data real do calendário',
   })
   @ApiQuery({
     name: 'due_to',
     required: false,
-    description:
-      'Data no formato AAAA-MM-DD; precisa ser uma data real do calendário',
+    description: 'Data no formato AAAA-MM-DD; precisa ser uma data real do calendário',
   })
   list(
     @Query(new ZodValidationPipe(listRequestsQuerySchema))
     query: ListRequestsQueryDto,
-    @CurrentUser() viewer: Viewer,
+    @CurrentUser() viewer: AuthenticatedUser,
   ) {
-    return this.service.list(query, viewer);
+    return this.service.list(query, viewer)
   }
 
   // @Roles('REQUESTER') aqui, ao contrário do list acima: só quem solicita
@@ -77,18 +67,15 @@ export class RequestsController {
   @HttpCode(201)
   create(
     @Body(new ZodValidationPipe(createRequestSchema)) input: CreateRequestDto,
-    @CurrentUser() requester: Viewer,
+    @CurrentUser() requester: AuthenticatedUser,
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    return this.service.create(input, requester, idempotencyKey);
+    return this.service.create(input, requester, idempotencyKey)
   }
 
   @Get(':id')
-  findOne(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() viewer: Viewer,
-  ) {
-    return this.service.findOne(id, viewer);
+  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() viewer: AuthenticatedUser) {
+    return this.service.findOne(id, viewer)
   }
 
   // @Roles('FINANCE') aqui e em mark-paid: só financeiro decide sobre uma
@@ -102,9 +89,9 @@ export class RequestsController {
   decide(
     @Param('id', ParseUUIDPipe) id: string,
     @Body(new ZodValidationPipe(decisionSchema)) input: DecisionDto,
-    @CurrentUser() actor: Viewer,
+    @CurrentUser() actor: AuthenticatedUser,
   ) {
-    return this.service.decide(id, input, actor);
+    return this.service.decide(id, input, actor)
   }
 
   @Post(':id/mark-paid')
@@ -113,8 +100,8 @@ export class RequestsController {
   markPaid(
     @Param('id', ParseUUIDPipe) id: string,
     @Body(new ZodValidationPipe(markPaidSchema)) input: MarkPaidDto,
-    @CurrentUser() actor: Viewer,
+    @CurrentUser() actor: AuthenticatedUser,
   ) {
-    return this.service.markPaid(id, input, actor);
+    return this.service.markPaid(id, input, actor)
   }
 }

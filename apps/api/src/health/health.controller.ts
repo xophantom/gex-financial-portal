@@ -1,14 +1,14 @@
-import { Controller, Get, Res } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import type { Response } from 'express';
-import { Public } from '../auth/public.decorator';
-import { withTimeout } from '../common/with-timeout';
-import { RedisService } from '../redis/redis.service';
-import { HealthDatabaseClient } from './health-database.client';
+import { Controller, Get, Res } from '@nestjs/common'
+import { ApiOperation, ApiTags } from '@nestjs/swagger'
+import type { Response } from 'express'
+import { Public } from '../auth/decorators/public.decorator'
+import { withTimeout } from '../common/utils/with-timeout'
+import { RedisService } from '../infra/redis/redis.service'
+import { HealthDatabaseClient } from './health-database.client'
 
 // Uma dependência congelada (ex.: `docker pause`) mantém o socket aberto sem
 // responder; sem timeout o probe travaria justamente quando deve acusar falha.
-const HEALTH_CHECK_TIMEOUT_MS = 1500;
+const HEALTH_CHECK_TIMEOUT_MS = 1500
 
 @ApiTags('health')
 @Controller('health')
@@ -40,15 +40,14 @@ export class HealthController {
       )
         .then(() => 'up' as const)
         .catch(() => 'down' as const),
-    ]);
+    ])
 
     // Redis fora é degradação (cache/idempotência/rate limit somem, a API
     // segue correta); sem banco não há resposta correta possível: 503.
-    const status =
-      database === 'down' ? 'unhealthy' : redis === 'down' ? 'degraded' : 'ok';
+    const status = database === 'down' ? 'unhealthy' : redis === 'down' ? 'degraded' : 'ok'
 
-    response.status(database === 'down' ? 503 : 200);
+    response.status(database === 'down' ? 503 : 200)
 
-    return { status, checks: { database, redis } };
+    return { status, checks: { database, redis } }
   }
 }

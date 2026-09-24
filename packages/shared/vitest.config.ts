@@ -11,11 +11,14 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
-      // errors.ts é só tipos e uma lista de constantes (sem função, sem
-      // branch); index.ts só reexporta os outros módulos. Nenhum dos dois
-      // tem lógica própria para o teste exercitar — contá-los reduziria o
-      // gate a perseguir 100% de arquivo vazio em vez de dinheiro/CNPJ/status.
-      exclude: ['src/**/*.test.ts', 'src/errors.ts', 'src/index.ts'],
+      // contracts/ é só tipos e constantes, index.ts só reexporta: sem lógica
+      // para exercitar.
+      exclude: [
+        'src/**/*.test.ts',
+        'src/schemas/test-helpers.ts',
+        'src/contracts/**',
+        'src/index.ts',
+      ],
       thresholds: { lines: 95, functions: 95, branches: 90 },
     },
   },

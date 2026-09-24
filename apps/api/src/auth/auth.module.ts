@@ -1,21 +1,21 @@
-import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
-import { JwtModule } from '@nestjs/jwt';
-import { PassportModule } from '@nestjs/passport';
-import { AuthController } from './auth.controller';
-import { AuthService } from './auth.service';
-import { JwtGuard } from './jwt.guard';
-import { JwtStrategy } from './jwt.strategy';
-import { resolveJwtSecret } from './jwt-secrets';
-import { RolesGuard } from './roles.guard';
+import { Module } from '@nestjs/common'
+import { APP_GUARD } from '@nestjs/core'
+import { JwtModule } from '@nestjs/jwt'
+import { PassportModule } from '@nestjs/passport'
+import { AuthController } from './auth.controller'
+import { AuthService } from './auth.service'
+import { JwtGuard } from './guards/jwt.guard'
+import { RolesGuard } from './guards/roles.guard'
+import { resolveJwtSecret } from './jwt-secrets'
+import { JwtStrategy } from './strategies/jwt.strategy'
 
 @Module({
   imports: [
     PassportModule,
     // registerAsync adia a leitura de JWT_SECRET para a hora em que o Nest
     // resolve os providers (compile()/create()), não para quando este
-    // arquivo é importado — helpers.ts de teste só define a env var depois
-    // de subir os containers descartáveis, então a leitura precisa ser tardia
+    // arquivo é importado — test/support/test-app.ts só define a env var
+    // depois de subir os containers descartáveis, então a leitura precisa ser tardia
     // (e igual à de JwtStrategy, senão sign() e verify() usam segredos
     // diferentes).
     JwtModule.registerAsync({

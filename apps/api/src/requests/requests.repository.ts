@@ -1,71 +1,20 @@
-import { randomUUID } from 'node:crypto';
-import { Injectable } from '@nestjs/common';
-import type {
-  CreateRequestInput,
-  ListRequestsQuery,
-  RequestStatus,
-  UserRole,
-} from '@gex/shared';
-import {
-  Prisma,
-  RequestCategory as PrismaRequestCategory,
-} from '@prisma/client';
-import { AppException } from '../common/http-exception.filter';
-import { PrismaService } from '../prisma/prisma.service';
-
-export interface Viewer {
-  id: string;
-  role: UserRole;
-}
-
-type RequestCategoryLabel = CreateRequestInput['category'];
-
-// O client do Prisma expõe a chave do enum (SERVICOS), não o valor do @map;
-// o domínio usa o rótulo com acento (SERVIÇOS).
-const CATEGORY_LABEL = new Map<PrismaRequestCategory, RequestCategoryLabel>([
-  ['SOFTWARE', 'SOFTWARE'],
-  ['SERVICOS', 'SERVIÇOS'],
-  ['MARKETING', 'MARKETING'],
-  ['INFRAESTRUTURA', 'INFRAESTRUTURA'],
-]);
-
-// Derivado do mesmo Map para que as duas direções nunca divirjam.
-const CATEGORY_KEY = new Map<RequestCategoryLabel, PrismaRequestCategory>(
-  Array.from(CATEGORY_LABEL, ([key, label]) => [label, key]),
-);
-
-export function toCategoryLabel(
-  category: PrismaRequestCategory,
-): RequestCategoryLabel {
-  const label = CATEGORY_LABEL.get(category);
-  if (!label) {
-    throw new Error(`unknown Prisma request category: ${category}`);
-  }
-  return label;
-}
-
-export function toCategoryKey(
-  label: RequestCategoryLabel,
-): PrismaRequestCategory {
-  const key = CATEGORY_KEY.get(label);
-  if (!key) {
-    throw new Error(`unknown request category label: ${label}`);
-  }
-  return key;
-}
+import { randomUUID } from 'node:crypto'
+import { Injectable } from '@nestjs/common'
+import type { CreateRequestInput, ListRequestsQuery, RequestStatus } from '@gex/shared'
+import { Prisma } from '@prisma/client'
+import type { AuthenticatedUser } from '../auth/authenticated-user'
+import { AppException } from '../common/errors/app.exception'
+import { PrismaService } from '../infra/prisma/prisma.service'
+import { toPrismaCategory } from './request-category.mapper'
 
 // % e _ são curingas de LIKE: sem escape, buscar "100%" casa com tudo.
-const escapeLike = (term: string) =>
-  term.replace(/[\\%_]/g, (char) => `\\${char}`);
+const escapeLike = (term: string) => term.replace(/[\\%_]/g, (char) => `\\${char}`)
 
 @Injectable()
 export class RequestsRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  private where(
-    query: ListRequestsQuery,
-    viewer: Viewer,
-  ): Prisma.RequestWhereInput {
+  private where(query: ListRequestsQuery, viewer: AuthenticatedUser): Prisma.RequestWhereInput {
     return {
       ...(viewer.role === 'REQUESTER' && { requesterId: viewer.id }),
       ...(query.status && { status: query.status }),
@@ -83,11 +32,11 @@ export class RequestsRepository {
           ...(query.due_to && { lte: new Date(`${query.due_to}T00:00:00Z`) }),
         },
       }),
-    };
+    }
   }
 
-  async list(query: ListRequestsQuery, viewer: Viewer) {
-    const where = this.where(query, viewer);
+  async list(query: ListRequestsQuery, viewer: AuthenticatedUser) {
+    const where = this.where(query, viewer)
 
     const [data, total] = await this.prisma.$transaction([
       this.prisma.request.findMany({
@@ -100,9 +49,9 @@ export class RequestsRepository {
         take: query.page_size,
       }),
       this.prisma.request.count({ where }),
-    ]);
+    ])
 
-    return { data, total };
+    return { data, total }
   }
 
   async create(input: CreateRequestInput, requesterId: string) {
@@ -117,12 +66,12 @@ export class RequestsRepository {
           amountCents: BigInt(input.amount_cents),
           competence: input.competence,
           dueDate: new Date(`${input.due_date}T00:00:00Z`),
-          category: toCategoryKey(input.category),
+          category: toPrismaCategory(input.category),
           description: input.description ?? null,
           status: 'PENDING',
         },
         include: { requester: { select: { id: true, name: true } } },
-      });
+      })
 
       // Evento de abertura no mesmo commit: toda transição gera auditoria.
       await tx.requestStatusEvent.create({
@@ -134,14 +83,14 @@ export class RequestsRepository {
           newStatus: 'PENDING',
           reason: null,
         },
-      });
+      })
 
-      return created;
-    });
+      return created
+    })
   }
 
   // Mesmo escopo por papel de list(); null vira 404 no service.
-  async findOne(id: string, viewer: Viewer) {
+  async findOne(id: string, viewer: AuthenticatedUser) {
     return this.prisma.request.findFirst({
       // O escopo entra no WHERE, não num if depois da busca: assim o registro
       // alheio simplesmente não existe para quem consulta, e a rota devolve 404.
@@ -156,16 +105,16 @@ export class RequestsRepository {
           include: { actor: { select: { id: true, name: true } } },
         },
       },
-    });
+    })
   }
 
   async transition(
     id: string,
     actorId: string,
     decide: (current: { status: RequestStatus; createdAt: Date }) => {
-      next: RequestStatus;
-      patch: Prisma.RequestUpdateInput;
-      reason: string | null;
+      next: RequestStatus
+      patch: Prisma.RequestUpdateInput
+      reason: string | null
     },
   ) {
     return this.prisma.$transaction(async (tx) => {
@@ -178,18 +127,17 @@ export class RequestsRepository {
         FROM requests
         WHERE id = ${id}::uuid
         FOR UPDATE
-      `;
+      `
 
-      if (!locked)
-        throw new AppException('NOT_FOUND', 'Solicitação não encontrada', 404);
+      if (!locked) throw new AppException('NOT_FOUND', 'Solicitação não encontrada', 404)
 
-      const { next, patch, reason } = decide(locked);
+      const { next, patch, reason } = decide(locked)
 
       const updated = await tx.request.update({
         where: { id },
         data: { ...patch, status: next },
         include: { requester: { select: { id: true, name: true } } },
-      });
+      })
 
       await tx.requestStatusEvent.create({
         data: {
@@ -200,9 +148,9 @@ export class RequestsRepository {
           newStatus: next,
           reason,
         },
-      });
+      })
 
-      return updated;
-    });
+      return updated
+    })
   }
 }
