@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it } from 'vitest'
 import expected from '../../../../../data/expected_results.json'
-import { MoneyInput } from './masked-inputs'
+import { CnpjInput, CompetenceInput, MoneyInput } from './masked-inputs'
 
 function ControlledMoneyInput({ initial = 0 }: { initial?: number }) {
   const [cents, setCents] = useState(initial)
@@ -51,5 +51,52 @@ describe('MoneyInput', () => {
 
     expect(input).toHaveValue('15,00')
     expect(screen.getByRole('status')).toHaveTextContent('1500')
+  })
+})
+
+function ControlledCnpjInput() {
+  const [digits, setDigits] = useState('')
+  return (
+    <>
+      <label htmlFor="cnpj">CNPJ</label>
+      <CnpjInput id="cnpj" value={digits} onChange={setDigits} />
+      <output>{digits}</output>
+    </>
+  )
+}
+
+function ControlledCompetenceInput() {
+  const [value, setValue] = useState('')
+  return (
+    <>
+      <label htmlFor="competence">Competência</label>
+      <CompetenceInput id="competence" value={value} onChange={setValue} />
+    </>
+  )
+}
+
+describe('CnpjInput', () => {
+  it('shows the mask once complete and hands over bare digits', async () => {
+    render(<ControlledCnpjInput />)
+    const input = screen.getByLabelText('CNPJ')
+    await userEvent.type(input, '11.222.333/0001-81')
+
+    expect(input).toHaveValue('11.222.333/0001-81')
+    expect(screen.getByRole('status')).toHaveTextContent(/^11222333000181$/)
+  })
+
+  it('renders the design system input', () => {
+    render(<ControlledCnpjInput />)
+    expect(screen.getByLabelText('CNPJ')).toHaveAttribute('data-slot', 'input')
+  })
+})
+
+describe('CompetenceInput', () => {
+  it('masks as MM/AAAA and stops at six digits', async () => {
+    render(<ControlledCompetenceInput />)
+    const input = screen.getByLabelText('Competência')
+    await userEvent.type(input, '0920261')
+
+    expect(input).toHaveValue('09/2026')
   })
 })

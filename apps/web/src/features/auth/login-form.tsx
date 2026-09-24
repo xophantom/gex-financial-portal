@@ -2,13 +2,24 @@
 
 import { loginSchema, type LoginInput } from '@gex/shared'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { CircleAlert } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import { Spinner } from '@/components/ui/spinner'
+
+interface ServerError {
+  title: string
+  hint?: string
+}
 
 export function LoginForm() {
   const router = useRouter()
-  const [serverError, setServerError] = useState<string | null>(null)
+  const [serverError, setServerError] = useState<ServerError | null>(null)
 
   const {
     register,
@@ -27,7 +38,10 @@ export function LoginForm() {
         body: JSON.stringify(values),
       })
     } catch {
-      setServerError('Não foi possível falar com o servidor. Tente novamente.')
+      setServerError({
+        title: 'Não foi possível falar com o servidor.',
+        hint: 'Verifique sua conexão e tente novamente.',
+      })
       return
     }
 
@@ -35,7 +49,10 @@ export function LoginForm() {
     const body = await response.json().catch(() => null)
 
     if (!response.ok) {
-      setServerError(body?.error?.message ?? 'Erro inesperado')
+      setServerError({
+        title: body?.error?.message ?? 'Erro inesperado',
+        hint: response.status === 401 ? 'Confira os dados digitados e tente de novo.' : undefined,
+      })
       return
     }
 
@@ -43,60 +60,53 @@ export function LoginForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
-      {serverError && (
-        <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-          {serverError}
-        </p>
-      )}
-
-      <div className="space-y-1">
-        <label htmlFor="email" className="block text-sm font-medium text-zinc-800">
-          E-mail
-        </label>
-        <input
-          id="email"
-          type="email"
-          autoComplete="username"
-          aria-invalid={errors.email ? 'true' : 'false'}
-          aria-describedby={errors.email ? 'email-error' : undefined}
-          className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
-          {...register('email')}
-        />
-        {errors.email && (
-          <p id="email-error" className="text-sm text-red-700">
-            {errors.email.message}
-          </p>
+    <form onSubmit={handleSubmit(onSubmit)} noValidate>
+      <FieldGroup>
+        {serverError && (
+          <Alert
+            variant="destructive"
+            className="border-destructive/30 bg-rejected-soft px-3 py-2.5"
+          >
+            <CircleAlert />
+            <AlertTitle>{serverError.title}</AlertTitle>
+            {serverError.hint && <AlertDescription>{serverError.hint}</AlertDescription>}
+          </Alert>
         )}
-      </div>
 
-      <div className="space-y-1">
-        <label htmlFor="password" className="block text-sm font-medium text-zinc-800">
-          Senha
-        </label>
-        <input
-          id="password"
-          type="password"
-          autoComplete="current-password"
-          aria-invalid={errors.password ? 'true' : 'false'}
-          aria-describedby={errors.password ? 'password-error' : undefined}
-          className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
-          {...register('password')}
-        />
-        {errors.password && (
-          <p id="password-error" className="text-sm text-red-700">
-            {errors.password.message}
-          </p>
-        )}
-      </div>
+        <Field data-invalid={errors.email ? true : undefined}>
+          <FieldLabel htmlFor="email">E-mail</FieldLabel>
+          <Input
+            id="email"
+            type="email"
+            autoComplete="username"
+            placeholder="nome@empresa.com.br"
+            aria-invalid={errors.email ? true : undefined}
+            aria-describedby={errors.email ? 'email-error' : undefined}
+            className="h-10 bg-card"
+            {...register('email')}
+          />
+          <FieldError id="email-error" errors={[errors.email]} />
+        </Field>
 
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="w-full rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
-      >
-        Entrar
-      </button>
+        <Field data-invalid={errors.password ? true : undefined}>
+          <FieldLabel htmlFor="password">Senha</FieldLabel>
+          <Input
+            id="password"
+            type="password"
+            autoComplete="current-password"
+            aria-invalid={errors.password ? true : undefined}
+            aria-describedby={errors.password ? 'password-error' : undefined}
+            className="h-10 bg-card"
+            {...register('password')}
+          />
+          <FieldError id="password-error" errors={[errors.password]} />
+        </Field>
+
+        <Button type="submit" size="lg" disabled={isSubmitting} className="mt-1 h-10 w-full">
+          {isSubmitting && <Spinner aria-hidden="true" />}
+          {isSubmitting ? 'Entrando…' : 'Entrar'}
+        </Button>
+      </FieldGroup>
     </form>
   )
 }

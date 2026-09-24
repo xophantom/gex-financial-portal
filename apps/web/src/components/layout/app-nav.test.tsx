@@ -37,7 +37,8 @@ describe('AppNav', () => {
   it('shows who is logged in and their role', () => {
     render(<AppNav user={finance} />)
 
-    expect(screen.getByText('Fernanda Financeiro · Financeiro')).toBeInTheDocument()
+    expect(screen.getByText('Fernanda Financeiro')).toBeInTheDocument()
+    expect(screen.getByText('Financeiro')).toBeInTheDocument()
   })
 
   it('offers "Nova solicitação" only to the requester', () => {
@@ -72,7 +73,7 @@ describe('AppNav', () => {
       'aria-current',
       'page',
     )
-    expect(screen.getByRole('link', { name: 'Dashboard' })).not.toHaveAttribute('aria-current')
+    expect(screen.getByRole('link', { name: 'Visão geral' })).not.toHaveAttribute('aria-current')
   })
 
   it('clears the server session before navigating to /login on logout', async () => {

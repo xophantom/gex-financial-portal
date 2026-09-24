@@ -58,4 +58,36 @@ describe('StatusTimeline', () => {
     expect(screen.queryAllByRole('button')).toHaveLength(0)
     expect(screen.queryAllByRole('textbox')).toHaveLength(0)
   })
+
+  it('describes each transition from the old status to the new one', () => {
+    render(<StatusTimeline events={events} />)
+
+    const items = screen.getAllByRole('listitem')
+    expect(items[0]).toHaveTextContent('Solicitação cadastrada')
+    expect(items[1]).toHaveTextContent('Pendente para Aprovada')
+    expect(items[2]).toHaveTextContent('Aprovada para Paga')
+  })
+
+  it('labels the reason of a rejection as its motive', () => {
+    render(
+      <StatusTimeline
+        events={[
+          {
+            ...events[1],
+            id: '9',
+            new_status: 'REJECTED',
+            reason: 'CNPJ de outra filial',
+          },
+        ]}
+      />,
+    )
+    expect(screen.getByText('CNPJ de outra filial').parentElement).toHaveTextContent(
+      'Motivo: CNPJ de outra filial',
+    )
+  })
+
+  it('says so when there is no event', () => {
+    render(<StatusTimeline events={[]} />)
+    expect(screen.getByText('Nenhum evento registrado.')).toBeInTheDocument()
+  })
 })

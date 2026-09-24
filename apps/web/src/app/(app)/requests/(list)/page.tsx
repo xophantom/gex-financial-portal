@@ -1,6 +1,9 @@
 import type { RequestListResponse } from '@gex/shared'
+import { CircleAlertIcon } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { PageHeader } from '@/components/layout/page-header'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Pagination } from '@/features/requests/pagination'
 import { RequestsFilters } from '@/features/requests/requests-filters'
 import { RequestsTable } from '@/features/requests/requests-table'
@@ -27,6 +30,7 @@ export default async function RequestsPage({
 }) {
   const params = await searchParams
   const session = await readSession()
+  const canCreate = session?.user.role === 'REQUESTER'
 
   const status = first(params.status)
   const supplier = first(params.supplier)
@@ -40,47 +44,55 @@ export default async function RequestsPage({
   if (dueFrom) query.set('due_from', dueFrom)
   if (dueTo) query.set('due_to', dueTo)
 
+  const filtered = Boolean(status || supplier || dueFrom || dueTo)
   const list = await loadList(query)
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-6 py-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-zinc-950 dark:text-zinc-50">Solicitações</h1>
-        {session?.user.role === 'REQUESTER' && (
-          <Link
-            href="/requests/new"
-            className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-          >
-            Nova solicitação
-          </Link>
-        )}
-      </div>
+    <>
+      <PageHeader
+        title="Solicitações"
+        description={list ? describeTotal(list.total, filtered) : undefined}
+      />
 
-      <div className="mt-6">
+      {/* group/list: a tabela esmaece enquanto filtros ou paginação buscam a
+          próxima lista (ambos marcam data-pending durante a transição). */}
+      <div className="group/list space-y-5">
         <RequestsFilters />
-      </div>
 
-      <div className="mt-6">
         {list ? (
-          <>
-            <RequestsTable rows={list.data} />
-            <Pagination page={list.page} totalPages={list.total_pages} />
-          </>
-        ) : (
-          <div
-            role="alert"
-            className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
+          <section
+            aria-label="Lista de solicitações"
+            className="overflow-hidden rounded-lg border border-border bg-card shadow-xs transition-opacity group-has-data-pending/list:opacity-60"
           >
-            Os filtros informados no endereço são inválidos. Corrija-os acima ou{' '}
-            <Link href="/requests" className="font-medium underline">
-              limpe os filtros
-            </Link>
-            .
-          </div>
+            <RequestsTable rows={list.data} filtered={filtered || page > 1} canCreate={canCreate} />
+            <Pagination page={list.page} totalPages={list.total_pages} />
+          </section>
+        ) : (
+          <Alert>
+            <CircleAlertIcon aria-hidden="true" className="text-pending" />
+            <AlertTitle>Os filtros do endereço não são válidos</AlertTitle>
+            <AlertDescription>
+              <p>
+                Uma data ou um status na URL não existe. Ajuste os filtros acima ou{' '}
+                <Link href="/requests">limpe todos os filtros</Link>.
+              </p>
+            </AlertDescription>
+          </Alert>
         )}
       </div>
-    </main>
+    </>
   )
+}
+
+function describeTotal(total: number, filtered: boolean): string {
+  if (total === 0)
+    return filtered
+      ? 'Nenhum resultado para os filtros aplicados'
+      : 'Nenhuma solicitação cadastrada'
+  const noun = total === 1 ? 'solicitação' : 'solicitações'
+  if (filtered)
+    return `${total} ${noun} ${total === 1 ? 'encontrada' : 'encontradas'} com os filtros aplicados`
+  return `${total} ${noun} no total`
 }
 
 // A URL é editável à mão: um filtro inválido (data inexistente, status

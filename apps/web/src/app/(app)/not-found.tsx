@@ -1,21 +1,37 @@
+import { FileSearch } from 'lucide-react'
 import Link from 'next/link'
+import { Button } from '@/components/ui/button'
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty'
 
+// Também é o que um solicitante vê ao abrir a solicitação de outra pessoa: a
+// API responde 404 (e não 403) para não revelar que o id existe.
 export default function AppNotFound() {
   return (
-    <main className="mx-auto w-full max-w-3xl px-6 py-16 text-center">
-      <h1 className="text-xl font-semibold text-zinc-950 dark:text-zinc-50">
-        Página não encontrada
-      </h1>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-        A solicitação ou página que você procura não existe ou não está disponível para o seu
-        perfil.
-      </p>
-      <Link
-        href="/requests"
-        className="mt-6 inline-block rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-      >
-        Ir para solicitações
-      </Link>
-    </main>
+    <Empty className="min-h-[60vh]">
+      <EmptyHeader>
+        <EmptyMedia variant="icon" className="size-12 rounded-lg">
+          <FileSearch className="size-6" />
+        </EmptyMedia>
+        <EmptyTitle>
+          <h1 className="text-2xl font-semibold">Solicitação ou página não encontrada</h1>
+        </EmptyTitle>
+        <EmptyDescription>
+          O endereço pode estar incompleto, ou o item não está disponível para o seu perfil. Procure
+          pelo fornecedor ou pelo status na lista de solicitações.
+        </EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent>
+        <Button asChild size="lg">
+          <Link href="/requests">Voltar para solicitações</Link>
+        </Button>
+      </EmptyContent>
+    </Empty>
   )
 }

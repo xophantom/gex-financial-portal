@@ -1,7 +1,9 @@
-import type { RequestDetailResponse } from '@gex/shared'
+import { formatCnpj, type RequestDetailResponse } from '@gex/shared'
+import { ChevronLeft } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { PageHeader } from '@/components/layout/page-header'
 import { RequestDetail } from '@/features/requests/request-detail'
 import { ApiError, apiFetchForPage } from '@/lib/api/client'
 
@@ -26,24 +28,39 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
     throw error
   }
 
+  const { request } = detail
+
   return (
-    <main className="mx-auto w-full max-w-4xl px-6 py-8">
+    <>
       <Link
         href="/requests"
-        className="text-sm font-medium text-zinc-600 hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-50"
+        className="-ml-1 mb-4 inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
       >
-        ← Voltar para solicitações
+        <ChevronLeft aria-hidden="true" className="size-4" />
+        Solicitações
       </Link>
-      <h1 className="mt-2 text-xl font-semibold text-zinc-950 dark:text-zinc-50">
-        Solicitação · {detail.request.invoice_number}
-      </h1>
-      <div className="mt-6">
-        <RequestDetail
-          request={detail.request}
-          history={detail.history}
-          allowedActions={detail.allowed_actions}
-        />
-      </div>
-    </main>
+      <PageHeader
+        title={request.supplier_name}
+        description={
+          <span className="flex flex-wrap gap-x-5 gap-y-1">
+            <span>
+              Nota fiscal{' '}
+              <span className="font-medium text-foreground">{request.invoice_number}</span>
+            </span>
+            <span>
+              CNPJ{' '}
+              <span className="font-medium text-foreground tabular-nums">
+                {formatCnpj(request.supplier_cnpj)}
+              </span>
+            </span>
+          </span>
+        }
+      />
+      <RequestDetail
+        request={request}
+        history={detail.history}
+        allowedActions={detail.allowed_actions}
+      />
+    </>
   )
 }

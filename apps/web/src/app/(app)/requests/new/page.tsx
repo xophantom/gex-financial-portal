@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
+import { PageHeader } from '@/components/layout/page-header'
 import { RequestForm } from '@/features/requests/request-form'
 import { readSession } from '@/lib/session/server'
 
@@ -13,11 +14,16 @@ export default async function NewRequestPage() {
   if (session?.user.role !== 'REQUESTER') redirect('/requests')
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-6 py-8">
-      <h1 className="text-xl font-semibold text-zinc-950 dark:text-zinc-50">Nova solicitação</h1>
-      <div className="mt-6">
+    <>
+      <PageHeader
+        title="Nova solicitação"
+        description="Cadastre a nota fiscal de um fornecedor para o financeiro aprovar e pagar."
+      />
+      {/* Largura de leitura: um formulário esticado a 1000px separa demais
+          rótulo, campo e botão. */}
+      <div className="max-w-3xl">
         <RequestForm />
       </div>
-    </main>
+    </>
   )
 }

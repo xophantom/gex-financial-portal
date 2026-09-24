@@ -27,12 +27,15 @@ describe('LoginForm', () => {
     await userEvent.click(screen.getByRole('button', { name: /entrar/i }))
 
     expect(await screen.findByText(/e-mail inválido/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/e-mail/i)).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByLabelText(/e-mail/i)).toHaveAccessibleDescription(/e-mail inválido/i)
     expect(fetch).not.toHaveBeenCalled()
   })
 
   it('shows the server message when credentials are rejected', async () => {
     vi.mocked(fetch).mockResolvedValue({
       ok: false,
+      status: 401,
       json: async () => ({ error: { message: 'E-mail ou senha inválidos' } }),
     } as Response)
 
@@ -43,6 +46,8 @@ describe('LoginForm', () => {
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('E-mail ou senha inválidos')
+    expect(alert).toHaveTextContent(/confira os dados/i)
+    expect(push).not.toHaveBeenCalled()
   })
 
   it('disables the button while submitting, so a double click sends once', async () => {
@@ -57,6 +62,7 @@ describe('LoginForm', () => {
     await userEvent.click(button)
 
     await waitFor(() => expect(button).toBeDisabled())
+    expect(button).toHaveTextContent('Entrando…')
     await userEvent.click(button)
     expect(fetch).toHaveBeenCalledTimes(1)
 

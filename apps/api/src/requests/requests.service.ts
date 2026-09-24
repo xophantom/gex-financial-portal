@@ -171,7 +171,11 @@ export class RequestsService {
     const updated = await this.repository.transition(id, actor.id, (current) => {
       this.assertTransition(current.status, 'PAID')
 
-      if (input.paid_at < dateInZone(current.createdAt, zone)) {
+      // Com APP_TODAY no passado, uma solicitação criada agora nasce "depois de
+      // hoje"; sem limitar pela data de referência, nenhuma data seria aceita.
+      const createdOn = dateInZone(current.createdAt, zone)
+      const earliest = createdOn < this.clock.today() ? createdOn : this.clock.today()
+      if (input.paid_at < earliest) {
         throw paidAtError('A data de pagamento não pode ser anterior à criação da solicitação')
       }
 

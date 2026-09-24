@@ -1,11 +1,11 @@
 'use client'
 
 import { formatCentsToBrl, formatCnpj, parseBrlToCents } from '@gex/shared'
+import { Input } from '@/components/ui/input'
 
-type BaseInputProps = Omit<
-  React.InputHTMLAttributes<HTMLInputElement>,
-  'value' | 'onChange' | 'inputMode'
->
+// Por baixo, o Input do design system: mesma borda, foco e estado de erro
+// (aria-invalid) dos demais campos.
+type BaseInputProps = Omit<React.ComponentProps<typeof Input>, 'value' | 'onChange' | 'inputMode'>
 
 // Cada campo entrega ao formulário o dado que a API espera (centavos,
 // dígitos do CNPJ); a máscara é só apresentação.
@@ -39,7 +39,7 @@ export function MoneyInput({ value, onChange, ...rest }: MoneyInputProps) {
   }
 
   return (
-    <input
+    <Input
       {...rest}
       inputMode="numeric"
       value={display}
@@ -63,7 +63,7 @@ export function CnpjInput({ value, onChange, ...rest }: CnpjInputProps) {
     onChange(event.target.value.replace(/\D/g, '').slice(0, 14))
   }
 
-  return <input {...rest} inputMode="numeric" value={display} onChange={handleChange} />
+  return <Input {...rest} inputMode="numeric" value={display} onChange={handleChange} />
 }
 
 export interface CompetenceInputProps extends BaseInputProps {
@@ -78,5 +78,5 @@ export function CompetenceInput({ value, onChange, ...rest }: CompetenceInputPro
     onChange(masked)
   }
 
-  return <input {...rest} inputMode="numeric" value={value} onChange={handleChange} />
+  return <Input {...rest} inputMode="numeric" value={value} onChange={handleChange} />
 }
