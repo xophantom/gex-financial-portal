@@ -48,9 +48,9 @@ describe('refreshOnce', () => {
   })
 
   it('coalesces per session: two different sessions never share a promise', async () => {
-    // Reproduz o achado do coordenador: uma trava única de módulo coalescia
-    // o refresh de QUALQUER usuário com o de outro, e quem perdia a corrida
-    // recebia o token de acesso da conta alheia — sequestro de sessão. Ana e
+    // Uma trava única de módulo coalesceria o refresh de QUALQUER usuário
+    // com o de outro, e quem perdesse a corrida receberia o token de acesso
+    // da conta alheia — sequestro de sessão. Ana e
     // Bruno correm em paralelo com chaves (refresh tokens) diferentes: cada
     // um precisa rodar o PRÓPRIO closure e receber o PRÓPRIO token.
     const refreshAna = vi.fn(async () => {
