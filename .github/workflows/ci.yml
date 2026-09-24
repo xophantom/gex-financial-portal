@@ -68,6 +68,14 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @gex/api exec prisma generate
+      # Schema e migrations têm de descrever o mesmo banco; o banco `postgres`
+      # do serviço é o shadow onde as migrations são reaplicadas.
+      - run: >-
+          pnpm --filter @gex/api exec prisma migrate diff
+          --from-migrations prisma/migrations
+          --to-schema-datamodel prisma/schema.prisma
+          --shadow-database-url postgresql://gex:gex_local_password@localhost:5432/postgres
+          --exit-code
       - run: pnpm --filter @gex/api db:migrate
       # Único job que sobe o artefato compilado (`node dist/...`); os demais
       # transpilam TypeScript em tempo de execução.
