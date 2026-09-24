@@ -11,6 +11,7 @@ import { HealthModule } from './health/health.module'
 import { ClockModule } from './infra/clock/clock.module'
 import { PrismaModule } from './infra/prisma/prisma.module'
 import { RedisModule } from './infra/redis/redis.module'
+import { TelemetryLifecycle } from './infra/telemetry.lifecycle'
 import { RequestsModule } from './requests/requests.module'
 
 @Module({
@@ -27,7 +28,7 @@ import { RequestsModule } from './requests/requests.module'
     RequestsModule,
     HealthModule,
   ],
-  providers: [{ provide: APP_PIPE, useClass: ZodValidationPipe }],
+  providers: [{ provide: APP_PIPE, useClass: ZodValidationPipe }, TelemetryLifecycle],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
