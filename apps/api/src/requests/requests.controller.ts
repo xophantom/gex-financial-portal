@@ -10,16 +10,9 @@ import {
   Query,
 } from '@nestjs/common'
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger'
-import {
-  createRequestSchema,
-  decisionSchema,
-  listRequestsQuerySchema,
-  markPaidSchema,
-} from '@gex/shared'
 import type { AuthenticatedUser } from '../auth/authenticated-user'
 import { CurrentUser } from '../auth/decorators/current-user.decorator'
 import { Roles } from '../auth/decorators/roles.decorator'
-import { ZodValidationPipe } from '../common/http/zod-validation.pipe'
 import { CreateRequestDto } from './dto/create-request.dto'
 import { DecisionDto } from './dto/decision.dto'
 import { ListRequestsQueryDto } from './dto/list-requests-query.dto'
@@ -52,11 +45,7 @@ export class RequestsController {
     required: false,
     description: 'Data no formato AAAA-MM-DD; precisa ser uma data real do calendário',
   })
-  list(
-    @Query(new ZodValidationPipe(listRequestsQuerySchema))
-    query: ListRequestsQueryDto,
-    @CurrentUser() viewer: AuthenticatedUser,
-  ) {
+  list(@Query() query: ListRequestsQueryDto, @CurrentUser() viewer: AuthenticatedUser) {
     return this.service.list(query, viewer)
   }
 
@@ -66,7 +55,7 @@ export class RequestsController {
   @Roles('REQUESTER')
   @HttpCode(201)
   create(
-    @Body(new ZodValidationPipe(createRequestSchema)) input: CreateRequestDto,
+    @Body() input: CreateRequestDto,
     @CurrentUser() requester: AuthenticatedUser,
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
@@ -88,7 +77,7 @@ export class RequestsController {
   @HttpCode(200)
   decide(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body(new ZodValidationPipe(decisionSchema)) input: DecisionDto,
+    @Body() input: DecisionDto,
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.service.decide(id, input, actor)
@@ -99,7 +88,7 @@ export class RequestsController {
   @HttpCode(200)
   markPaid(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body(new ZodValidationPipe(markPaidSchema)) input: MarkPaidDto,
+    @Body() input: MarkPaidDto,
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.service.markPaid(id, input, actor)

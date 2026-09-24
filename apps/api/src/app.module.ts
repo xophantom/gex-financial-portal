@@ -1,8 +1,10 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common'
+import { APP_PIPE } from '@nestjs/core'
 import { EventEmitterModule } from '@nestjs/event-emitter'
 import { LoggerModule } from 'nestjs-pino'
 import { AuthModule } from './auth/auth.module'
 import { CorrelationMiddleware } from './common/http/correlation.middleware'
+import { ZodValidationPipe } from './common/http/zod-validation.pipe'
 import { buildLogger } from './common/logging/logger'
 import { DashboardModule } from './dashboard/dashboard.module'
 import { HealthModule } from './health/health.module'
@@ -25,8 +27,7 @@ import { RequestsModule } from './requests/requests.module'
     RequestsModule,
     HealthModule,
   ],
-  controllers: [],
-  providers: [],
+  providers: [{ provide: APP_PIPE, useClass: ZodValidationPipe }],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
