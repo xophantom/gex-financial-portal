@@ -1,10 +1,10 @@
+import { formatCentsToBrl, type RequestStatus } from '@gex/shared'
 import Link from 'next/link'
-import { formatCentsToBrl } from '@gex/shared'
+import { formatCalendarDate } from '@/format/dates'
 import { EmptyState } from './empty-state'
 import { StatusBadge } from './status-badge'
 
-// Forma de uma linha de GET /requests (apps/api/src/requests/requests.service.ts
-// toResponse()). Só os campos que esta tela usa — não é o contrato inteiro.
+// Linha de GET /requests — só os campos que esta tela usa.
 export interface RequestRow {
   id: string
   supplier_name: string
@@ -12,17 +12,9 @@ export interface RequestRow {
   invoice_number: string
   amount_cents: number
   due_date: string
-  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAID'
+  status: RequestStatus
   is_overdue: boolean
   requester: { id: string; name: string }
-}
-
-// due_date chega como AAAA-MM-DD (já uma data de calendário validada pelo
-// backend) — fatiar a string evita qualquer conversão de fuso horário que um
-// `new Date(iso)` faria ao interpretar a meia-noite UTC.
-function formatDueDate(iso: string): string {
-  const [year, month, day] = iso.split('-')
-  return `${day}/${month}/${year}`
 }
 
 export function RequestsTable({ rows }: { rows: RequestRow[] }) {
@@ -68,10 +60,9 @@ export function RequestsTable({ rows }: { rows: RequestRow[] }) {
             <td className="py-2 pr-4">{row.invoice_number}</td>
             <td className="py-2 pr-4">{`R$ ${formatCentsToBrl(row.amount_cents)}`}</td>
             <td className="py-2 pr-4">
-              {formatDueDate(row.due_date)}
+              {formatCalendarDate(row.due_date)}
               {row.is_overdue && (
-                // Rótulo em texto, não só a cor do badge — daltonismo e leitor de
-                // tela não percebem "vermelho", precisam da palavra.
+                // Texto, não só cor: leitor de tela e daltonismo precisam da palavra.
                 <span className="ml-2 text-xs font-semibold text-red-600 dark:text-red-400">
                   Vencida
                 </span>

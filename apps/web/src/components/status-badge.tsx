@@ -1,15 +1,7 @@
-// Rótulo de exibição, não uma checagem de tipo — mesmo padrão do ROLE_LABELS
-// em app-nav.tsx: o valor cru já chega validado do backend (RequestStatus em
-// @gex/shared), o fallback existe só para nunca esconder um status
-// desconhecido no futuro atrás de undefined.
-const STATUS_LABELS: Record<string, string> = {
-  PENDING: 'Pendente',
-  APPROVED: 'Aprovada',
-  REJECTED: 'Rejeitada',
-  PAID: 'Paga',
-}
+import type { RequestStatus } from '@gex/shared'
+import { statusLabel } from '@/format/labels'
 
-const STATUS_TONE: Record<string, string> = {
+const STATUS_TONE: Record<RequestStatus, string> = {
   PENDING:
     'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200',
   APPROVED:
@@ -19,12 +11,14 @@ const STATUS_TONE: Record<string, string> = {
   PAID: 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
 }
 
-export function StatusBadge({ status }: { status: string }) {
+const UNKNOWN_TONE = 'border-zinc-300 bg-zinc-50 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300'
+
+export function StatusBadge({ status }: { status: RequestStatus }) {
   return (
     <span
-      className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_TONE[status] ?? 'border-zinc-300 bg-zinc-50 text-zinc-700'}`}
+      className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_TONE[status] ?? UNKNOWN_TONE}`}
     >
-      {STATUS_LABELS[status] ?? status}
+      {statusLabel(status)}
     </span>
   )
 }

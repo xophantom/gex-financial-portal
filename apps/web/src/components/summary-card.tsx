@@ -1,18 +1,13 @@
 import { formatCentsToBrl } from '@gex/shared'
 
-export interface SummaryCardProps {
+// Um cartão mostra uma contagem OU um valor em centavos, nunca os dois.
+export type SummaryCardProps = {
   label: string
-  valueCents?: number
-  count?: number
   tone?: 'default' | 'warning'
-}
+} & ({ valueCents: number; count?: never } | { count: number; valueCents?: never })
 
-// count e valueCents são mutuamente exclusivos: um cartão de contagem
-// (Vencidas) nunca deve passar pelo formatador monetário, e um cartão de
-// dinheiro nunca deve exibir um cardinal cru — cada indicador do
-// /dashboard/summary já chega tipado como um ou outro, nunca os dois.
 export function SummaryCard({ label, valueCents, count, tone = 'default' }: SummaryCardProps) {
-  const display = count !== undefined ? String(count) : `R$ ${formatCentsToBrl(valueCents ?? 0)}`
+  const display = count !== undefined ? String(count) : `R$ ${formatCentsToBrl(valueCents)}`
 
   return (
     <div
