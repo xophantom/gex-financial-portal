@@ -1,7 +1,11 @@
+import type { Metadata } from 'next'
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { RequestDetail, type RequestAction, type RequestDetailData } from '@/components/request-detail'
 import type { StatusEvent } from '@/components/status-timeline'
-import { ApiError, apiFetch } from '@/lib/api-client'
+import { ApiError, apiFetchForPage } from '@/lib/api-client'
+
+export const metadata: Metadata = { title: 'Solicitação' }
 
 // Forma de GET /requests/:id (apps/api/src/requests/requests.service.ts
 // findOne()) — mesma nota de dashboard/page.tsx: sem contrato HTTP
@@ -12,6 +16,8 @@ interface RequestDetailResponse {
   allowed_actions: RequestAction[]
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export default async function RequestDetailPage({
   params,
 }: {
@@ -19,9 +25,12 @@ export default async function RequestDetailPage({
 }) {
   const { id } = await params
 
+  // Um id que nem é UUID não pode existir: 404 direto, sem ida à API.
+  if (!UUID.test(id)) notFound()
+
   let detail: RequestDetailResponse
   try {
-    detail = await apiFetch<RequestDetailResponse>(`/requests/${id}`)
+    detail = await apiFetchForPage<RequestDetailResponse>(`/requests/${id}`)
   } catch (error) {
     // 404 tanto para "não existe" quanto para "existe mas não é meu" — o
     // backend devolve o mesmo código nos dois casos de propósito (não
@@ -31,8 +40,14 @@ export default async function RequestDetailPage({
   }
 
   return (
-    <main className="mx-auto max-w-4xl px-6 py-8">
-      <h1 className="text-xl font-semibold text-zinc-950 dark:text-zinc-50">
+    <main className="mx-auto w-full max-w-4xl px-6 py-8">
+      <Link
+        href="/requests"
+        className="text-sm font-medium text-zinc-600 hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-50"
+      >
+        ← Voltar para solicitações
+      </Link>
+      <h1 className="mt-2 text-xl font-semibold text-zinc-950 dark:text-zinc-50">
         Solicitação · {detail.request.invoice_number}
       </h1>
       <div className="mt-6">
