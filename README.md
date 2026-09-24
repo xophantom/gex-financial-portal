@@ -11,9 +11,13 @@ financeiro aprova, rejeita ou marca como paga.
 docker compose up --build
 ```
 
-Nenhum `.env` é necessário — todo valor tem default embutido no
+Só é preciso Docker. Nenhum `.env` é necessário: todo valor tem default no
 `docker-compose.yml`, incluindo `APP_TODAY=2026-09-18`, a data de referência
-usada para os números abaixo.
+usada para os números abaixo. Na subida, a API aplica as migrations e carrega o
+seed.
+
+Se alguma porta já estiver em uso, troque só a publicada no host, por exemplo
+`POSTGRES_PORT=55432 API_PORT=3101 WEB_PORT=3100 docker compose up --build`.
 
 | Serviço      | URL                        |
 | ------------ | -------------------------- |
@@ -30,9 +34,18 @@ usada para os números abaixo.
 | `outro.solicitante@gex.test` | `GexRequester456!` | REQUESTER | Idem — usado para provar isolamento entre solicitantes |
 | `financeiro@gex.test`        | `GexFinance123!`   | FINANCE   | Ver todas, aprovar, rejeitar e marcar como paga        |
 
+## Roteiro de avaliação
+
+1. Entre como `solicitante@gex.test` e cadastre uma nota em **Nova solicitação**
+   (cole `1.553,13` no valor; o CNPJ aceita máscara).
+2. Entre como `financeiro@gex.test`: a visão geral mostra o que aguarda decisão.
+   Abra a solicitação, aprove e registre o pagamento com a data de 18/09/2026.
+3. O histórico no detalhe registra cada transição, com autor e motivo.
+
 ## Dashboard esperado
 
-Com `APP_TODAY=2026-09-18` (o default do Compose), o perfil `FINANCE` deve ver:
+Com `APP_TODAY=2026-09-18` (o default do Compose) e o banco recém-criado, o
+perfil `FINANCE` deve ver:
 
 | Indicador             | Valor esperado |
 | --------------------- | -------------: |
@@ -41,9 +54,15 @@ Com `APP_TODAY=2026-09-18` (o default do Compose), o perfil `FINANCE` deve ver:
 | Pago no mês           |    R$ 8.415,49 |
 | Solicitações vencidas |              4 |
 
+Os números mudam conforme você cria, aprova ou paga solicitações. Para voltar
+ao estado do seed: `docker compose down -v && docker compose up --build`.
+
 ## Como testar
 
+Com Node 22 e pnpm (`corepack enable`):
+
 ```bash
+pnpm install && pnpm bootstrap     # dependências, build do @gex/shared e client do Prisma
 pnpm test                          # unitários: @gex/shared, @gex/web, @gex/api
 pnpm lint && pnpm format:check     # ESLint e Prettier (config única na raiz)
 pnpm --filter @gex/api test:e2e    # integração com Postgres real via Testcontainers (exige Docker)
@@ -74,7 +93,7 @@ apps/api/
   scripts/smoke-test.ts sobe o build compilado e confere o boot
 apps/web/src/
   app/                  rotas (App Router) e o BFF em app/api, que guarda o JWT em cookie httpOnly
-  components/           ui/ (primitivos) e layout/ (navegação)
+  components/           ui/ (primitivos shadcn), layout/ (navegação) e status/ (cores e badge por status)
   features/             auth, dashboard e requests
   lib/                  cliente da API, sessão e formatação
 packages/shared/src/
@@ -99,7 +118,8 @@ no web e no shared).
   de calendário ("vencida", "pago no mês").
 - **Data de pagamento é um dado próprio**, informada como `AAAA-MM-DD`, gravada
   ao meio-dia de São Paulo e validada: não pode ser futura nem anterior à
-  criação da solicitação.
+  criação da solicitação (ou ao dia de referência, quando `APP_TODAY` está no
+  passado e a solicitação foi criada pelo relógio real).
 - **Integridade no banco, não só na API.** Índice único em (CNPJ, nota) e
   `CHECK` para valor positivo, formato da competência, motivo na rejeição e
   data/referência no pagamento. O número da nota é normalizado (trim,
@@ -118,10 +138,13 @@ no web e no shared).
   durante a queda podem servir um resumo antigo por até 60 s após a volta.
 - **Seed só cria o que falta.** Roda a cada subida do container sem desfazer
   aprovações ou pagamentos feitos durante a avaliação.
-- **Sem TanStack Query.** Server Components buscam com `cache: 'no-store'` e
-  mutações chamam `router.refresh()`, então não sobra cache de cliente para
-  gerenciar. Zustand guarda toasts e o diálogo aberto; nuqs mantém filtros e
-  página na URL (busca compartilhável, botão voltar funciona).
+- **Módulos desacoplados por evento.** Criar, decidir e pagar emitem
+  `requests.changed`; o dashboard escuta para invalidar o cache. O módulo de
+  solicitações não conhece quem mantém visões derivadas dele.
+- **Sem estado global no cliente.** Server Components buscam com
+  `cache: 'no-store'` e mutações chamam `router.refresh()`, então não há cache
+  de cliente para gerenciar (sem TanStack Query nem store). Filtros e página
+  ficam na URL via nuqs: a busca é compartilhável e o botão voltar funciona.
 - **Interface com shadcn/ui (Radix).** Os primitivos (botão, campo, diálogo,
   tabela, toasts via Sonner) vêm do shadcn, que já resolve foco, teclado e
   leitores de tela; o que é do produto fica em `features/`. A paleta (papel,

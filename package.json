@@ -6,6 +6,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "bootstrap": "pnpm --filter @gex/shared build && pnpm --filter @gex/api exec prisma generate",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
