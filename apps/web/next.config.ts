@@ -8,6 +8,8 @@ const nextConfig: NextConfig = {
   // e pode não incluir `@gex/shared` (fora de apps/web) no pacote final.
   output: 'standalone',
   outputFileTracingRoot: path.join(__dirname, '../..'),
+  // O indicador flutuante do modo dev cobre o rodapé da sidebar.
+  devIndicators: false,
 }
 
 export default nextConfig

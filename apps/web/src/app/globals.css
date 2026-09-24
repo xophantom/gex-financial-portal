@@ -1,26 +1,127 @@
 @import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
+/*
+ * "Mesa do contas a pagar": papel frio, tinta azul-marinho e a caneta azul
+ * do escritório como cor de ação. Os tons de status (pendente, aprovada,
+ * rejeitada, paga) são tokens próprios porque aparecem em badge, carimbo,
+ * régua do dashboard e linha do tempo — nunca uma cor avulsa por componente.
+ */
 @theme inline {
+  --font-sans: var(--font-public-sans);
+  --font-heading: var(--font-bricolage);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+
+  --color-pending: var(--pending);
+  --color-pending-soft: var(--pending-soft);
+  --color-approved: var(--approved);
+  --color-approved-soft: var(--approved-soft);
+  --color-rejected: var(--rejected);
+  --color-rejected-soft: var(--rejected-soft);
+  --color-paid: var(--paid);
+  --color-paid-soft: var(--paid-soft);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  --radius: 0.5rem;
+
+  /* papel, tinta e caneta */
+  --background: #f6f7f9;
+  --foreground: #16233f;
+  --card: #ffffff;
+  --card-foreground: #16233f;
+  --popover: #ffffff;
+  --popover-foreground: #16233f;
+  --primary: #2447b8;
+  --primary-foreground: #ffffff;
+  --secondary: #eef1f6;
+  --secondary-foreground: #16233f;
+  --muted: #eef1f6;
+  --muted-foreground: #56617a;
+  --accent: #e8edfb;
+  --accent-foreground: #1c3794;
+  --destructive: #b42318;
+  --border: #dde2ea;
+  --input: #c9d0dc;
+  --ring: #2447b8;
+
+  /* sidebar em tinta */
+  --sidebar: #16233f;
+  --sidebar-foreground: #e7ecf7;
+  --sidebar-muted: #9aa7c4;
+  --sidebar-accent: #24365e;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #2a3c63;
+
+  /* status */
+  --pending: #9a5b00;
+  --pending-soft: #fdf1dc;
+  --approved: #2447b8;
+  --approved-soft: #e8edfb;
+  --rejected: #b42318;
+  --rejected-soft: #fce9e7;
+  --paid: #1f7a55;
+  --paid-soft: #e3f3ea;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    font-feature-settings: 'ss01';
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-heading tracking-tight;
+  }
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
