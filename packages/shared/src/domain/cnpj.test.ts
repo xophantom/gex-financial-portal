@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { formatCnpj, isValidCnpj, normalizeCnpj } from './cnpj.js'
 
 const seed = JSON.parse(
-  readFileSync(new URL('../../../data/seed_requests.json', import.meta.url), 'utf8'),
+  readFileSync(new URL('../../../../data/seed_requests.json', import.meta.url), 'utf8'),
 ) as Array<{ supplier_cnpj: string }>
 
 describe('normalizeCnpj', () => {

@@ -1,8 +1,8 @@
 import { z } from 'zod'
-import { isValidCnpj, normalizeCnpj } from './cnpj.js'
-import { parseCompetenceInput } from './competence.js'
-import { REQUEST_STATUSES } from './status.js'
-import { isCalendarDate } from './date.js'
+import { isValidCnpj, normalizeCnpj } from '../domain/cnpj.js'
+import { parseCompetenceInput } from '../domain/competence.js'
+import { REQUEST_STATUSES } from '../domain/status.js'
+import { isCalendarDate } from '../domain/date.js'
 
 export const REQUEST_CATEGORIES = [
   'SOFTWARE',
@@ -10,6 +10,7 @@ export const REQUEST_CATEGORIES = [
   'MARKETING',
   'INFRAESTRUTURA',
 ] as const
+export type RequestCategory = (typeof REQUEST_CATEGORIES)[number]
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 
@@ -120,29 +121,9 @@ export const markPaidSchema = z.object({
     .max(120, 'A referência do pagamento não pode passar de 120 caracteres'),
 })
 
-export const loginSchema = z.object({
-  // Minúsculas: e-mail não diferencia caixa na prática, e o seed já é minúsculo.
-  email: z
-    .string({ required_error: 'Informe o e-mail', invalid_type_error: 'Informe o e-mail' })
-    .trim()
-    .toLowerCase()
-    .email('E-mail inválido'),
-  password: z
-    .string({ required_error: 'Informe a senha', invalid_type_error: 'Informe a senha' })
-    .min(1, 'Informe a senha'),
-})
-
-export const refreshSchema = z.object({
-  refresh_token: z
-    .string({ required_error: 'Informe o refresh token', invalid_type_error: 'Informe o refresh token' })
-    .min(1, 'Informe o refresh token'),
-})
-
 export type CreateRequestInput = z.infer<typeof createRequestSchema>
 // Entrada do formulário, antes dos transforms (CNPJ mascarado, MM/AAAA).
 export type CreateRequestFormInput = z.input<typeof createRequestSchema>
 export type ListRequestsQuery = z.infer<typeof listRequestsQuerySchema>
 export type DecisionInput = z.infer<typeof decisionSchema>
 export type MarkPaidInput = z.infer<typeof markPaidSchema>
-export type LoginInput = z.infer<typeof loginSchema>
-export type RefreshInput = z.infer<typeof refreshSchema>

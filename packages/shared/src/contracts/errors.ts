@@ -8,6 +8,8 @@ export const ERROR_CODES = [
   'CONFLICT',
   'TOO_MANY_REQUESTS',
   'INTERNAL_ERROR',
+  // Emitido pelo BFF do web quando a API não responde.
+  'UPSTREAM_UNAVAILABLE',
 ] as const
 
 export type ErrorCode = (typeof ERROR_CODES)[number]

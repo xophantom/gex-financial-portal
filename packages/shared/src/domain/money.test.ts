@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { formatCentsToBrl, parseBrlToCents } from './money.js'
 
 const expected = JSON.parse(
-  readFileSync(new URL('../../../data/expected_results.json', import.meta.url), 'utf8'),
+  readFileSync(new URL('../../../../data/expected_results.json', import.meta.url), 'utf8'),
 ) as { money_parse_examples: Record<string, number> }
 
 describe('parseBrlToCents', () => {
