@@ -2,27 +2,27 @@
 
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import { roleLabel } from '@/format/labels'
 import type { SessionUser } from '@/lib/session'
-
-// Rótulo de exibição, não uma checagem de tipo — o valor cru já vem
-// validado do backend (UserRole em @gex/shared). O fallback `?? user.role`
-// existe só para nunca esconder um papel desconhecido no futuro atrás de
-// undefined.
-const ROLE_LABELS: Record<string, string> = {
-  REQUESTER: 'Solicitante',
-  FINANCE: 'Financeiro',
-}
+import { useUiStore } from '@/stores/ui-store'
 
 export function AppNav({ user }: { user: SessionUser }) {
   const router = useRouter()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const pushToast = useUiStore((state) => state.pushToast)
 
   const handleLogout = async () => {
     setIsLoggingOut(true)
     // POST antes do push: só depois que o cookie httpOnly foi apagado no
     // servidor é seguro navegar para /login — na ordem inversa, um usuário
     // que aperte "voltar" reencontraria uma sessão ainda válida.
-    await fetch('/api/auth/logout', { method: 'POST' })
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' })
+    } catch {
+      setIsLoggingOut(false)
+      pushToast({ message: 'Não foi possível sair. Tente novamente.', tone: 'error' })
+      return
+    }
     router.push('/login')
     router.refresh()
   }
@@ -34,7 +34,7 @@ export function AppNav({ user }: { user: SessionUser }) {
       </span>
       <div className="flex items-center gap-3 text-sm">
         <span className="text-zinc-700 dark:text-zinc-300">
-          {user.name} · {ROLE_LABELS[user.role] ?? user.role}
+          {user.name} · {roleLabel(user.role)}
         </span>
         <button
           type="button"

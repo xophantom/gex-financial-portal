@@ -1,3 +1,4 @@
+import type { RequestAction } from '@gex/shared'
 import { create } from 'zustand'
 
 export interface Toast {
@@ -10,11 +11,7 @@ interface UiState {
   toasts: Toast[]
   pushToast: (toast: Omit<Toast, 'id'>) => void
   dismissToast: (id: string) => void
-  // Qual diálogo de decisão está aberto no momento. Vive aqui, não como
-  // useState local de request-detail.tsx, porque é o mesmo tipo de estado de
-  // UI (o que está aberto agora) que uma tela futura precisando coordenar
-  // com a lista reaproveitaria sem duplicar a store.
-  openDialog: 'APPROVE' | 'REJECT' | 'MARK_PAID' | null
+  openDialog: RequestAction | null
   setOpenDialog: (dialog: UiState['openDialog']) => void
 }
 

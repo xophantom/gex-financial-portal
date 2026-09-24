@@ -63,4 +63,16 @@ describe('LoginForm', () => {
     resolve({ ok: true, json: async () => ({ user: { role: 'REQUESTER' } }) } as Response)
     await waitFor(() => expect(push).toHaveBeenCalledWith('/dashboard'))
   })
+
+  it('shows a message when the server cannot be reached', async () => {
+    vi.mocked(fetch).mockRejectedValue(new TypeError('Failed to fetch'))
+
+    render(<LoginForm />)
+    await userEvent.type(screen.getByLabelText(/e-mail/i), 'solicitante@gex.test')
+    await userEvent.type(screen.getByLabelText(/senha/i), 'GexRequester123!')
+    await userEvent.click(screen.getByRole('button', { name: /entrar/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/não foi possível/i)
+    expect(push).not.toHaveBeenCalled()
+  })
 })

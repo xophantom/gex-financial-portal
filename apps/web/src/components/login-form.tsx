@@ -19,15 +19,19 @@ export function LoginForm() {
   const onSubmit = async (values: LoginInput) => {
     setServerError(null)
 
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(values),
-    })
+    let response: Response
+    try {
+      response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(values),
+      })
+    } catch {
+      setServerError('Não foi possível falar com o servidor. Tente novamente.')
+      return
+    }
 
-    // .catch(() => null): um 502 do próprio BFF (API fora do ar) ou qualquer
-    // resposta sem corpo JSON não pode estourar um SyntaxError dentro do
-    // submit — isso deixaria o usuário sem NENHUMA mensagem na tela.
+    // Resposta sem corpo JSON (ex.: 502 do BFF) não pode estourar o submit.
     const body = await response.json().catch(() => null)
 
     if (!response.ok) {

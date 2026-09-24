@@ -40,6 +40,32 @@ describe('DecisionDialog', () => {
     resolve({ ok: true, json: async () => ({}) } as Response)
   })
 
+  it('submits only once on a double click', async () => {
+    vi.mocked(fetch).mockReturnValue(new Promise<Response>(() => {}))
+
+    render(<DecisionDialog requestId="r1" decision="APPROVE" onClose={vi.fn()} onSuccess={vi.fn()} />)
+    await userEvent.dblClick(screen.getByRole('button', { name: /confirmar/i }))
+
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows an error and re-enables confirm when the network fails', async () => {
+    vi.mocked(fetch).mockRejectedValue(new TypeError('Failed to fetch'))
+    const onSuccess = vi.fn()
+
+    render(<DecisionDialog requestId="r1" decision="APPROVE" onClose={vi.fn()} onSuccess={onSuccess} />)
+    await userEvent.click(screen.getByRole('button', { name: /confirmar/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/não foi possível/i)
+    expect(screen.getByRole('button', { name: /confirmar/i })).toBeEnabled()
+    expect(onSuccess).not.toHaveBeenCalled()
+  })
+
+  it('is labelled by its title', () => {
+    render(<DecisionDialog requestId="r1" decision="REJECT" onClose={vi.fn()} onSuccess={vi.fn()} />)
+    expect(screen.getByRole('dialog', { name: 'Rejeitar solicitação' })).toBeInTheDocument()
+  })
+
   it('calls onSuccess after a confirmed approval', async () => {
     vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({}) } as Response)
     const onSuccess = vi.fn()
