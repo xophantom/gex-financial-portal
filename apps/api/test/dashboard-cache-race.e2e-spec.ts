@@ -34,15 +34,10 @@ const viewer: Viewer = {
   role: 'FINANCE',
 };
 
-// Redis de verdade (Testcontainers), não um fake em memória: a corrida é
-// sobre a ordem real de get/setNx/incr no Redis, que um Map em JS não
-// reproduz fielmente. O repositório, esse sim, é um dublê controlado à mão
-// — é a única forma de segurar a "consulta SQL" em voo pelo tempo exato
-// necessário para forçar a interleaving determinística, sem sleep-and-hope
-// (mesma preocupação da Tarefa 14 com withHeldLock; aqui quem "trava" é a
-// Promise que o dublê devolve, não um lock de linha do Postgres — um SELECT
-// agregado comum não bloqueia em FOR UPDATE de outra transação).
-describe('DashboardService cache-aside ordering (Task 15 fix round 1, finding 2)', () => {
+// Redis de verdade para a ordem real dos comandos; o repositório é um dublê
+// cuja Promise segura a "consulta" em voo, tornando a intercalação
+// determinística sem sleep.
+describe('DashboardService cache-aside ordering', () => {
   let redis: RedisService;
   let clock: ClockService;
 
@@ -52,8 +47,11 @@ describe('DashboardService cache-aside ordering (Task 15 fix round 1, finding 2)
 
   afterAll(async () => stopTestRedis());
 
-  beforeEach(() => {
+  // onModuleInit espera a conexão: sem ela, os comandos falhariam (sem fila
+  // offline) e o teste passaria sem cache nenhum, pelo motivo errado.
+  beforeEach(async () => {
     redis = new RedisService();
+    await redis.onModuleInit();
     clock = new ClockService({ APP_TODAY: '2026-09-18' });
   });
 
@@ -85,8 +83,7 @@ describe('DashboardService cache-aside ordering (Task 15 fix round 1, finding 2)
     const readA = service.summary(viewer);
     await queryStarted;
 
-    // Escritor B: commita e invalida ENQUANTO a consulta de A ainda está em
-    // voo — exatamente a janela que o achado do revisor descreve.
+    // Escritor B: commita e invalida ENQUANTO a consulta de A está em voo.
     await service.invalidate();
 
     // Só agora a consulta "lenta" de A resolve, com o valor PRÉ-escrita.

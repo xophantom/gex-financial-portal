@@ -7,9 +7,8 @@ import { DashboardRepository } from './dashboard.repository';
 
 const CACHE_TTL_SECONDS = 60;
 
-// Sem TTL (ver RedisService.incr): esta chave é um contador que nunca pode
-// reiniciar sozinho, ou uma leitura em voo capturaria uma geração "alta" de
-// antes do reset que nunca mais bateria com a baixa atual.
+// Contador sem TTL: se reiniciasse, uma leitura com a geração antiga (mais
+// alta) voltaria a ser válida.
 const GENERATION_KEY = 'dashboard:generation';
 
 export interface DashboardSummary {
@@ -38,23 +37,18 @@ export class DashboardService {
   async summary(viewer: Viewer) {
     const today = this.clock.today();
 
-    // A geração é capturada ANTES da consulta agregada e entra na chave,
-    // além de role+id+data (a chave sem geração já fechava o vazamento
-    // entre viewers da Tarefa 13 — isto fecha uma janela diferente: uma
-    // escrita que commita e invalida ENQUANTO esta consulta está em voo, e
-    // que faria este método gravar no cache um total de antes dela mesma
-    // — ver invalidate() abaixo para o porquê disto ser suficiente sem
-    // precisar reconferir nada depois de calcular `summary`). Role + id +
-    // data, nunca só um deles: o vazamento da Tarefa 13 aconteceu porque a
-    // chave dependia só do valor enviado pelo cliente, sem o dono. O id
-    // sozinho já distingue os dois solicitantes (dois ids nunca colidem no
-    // schema atual), e o role garante que uma entrada nunca é lida como se
-    // fosse de outro papel — mesmo que, no futuro, um id deixe de ser
-    // exclusivo de um único papel.
-    const generation = (await this.redis.get(GENERATION_KEY)) ?? '0';
-    const key = `dashboard:${viewer.role}:${viewer.id}:${today}:${generation}`;
-    const cached = await this.redis.get(key);
+    // A geração é lida ANTES da consulta e entra na chave: se uma escrita
+    // invalidar enquanto a consulta está em voo, o resultado desatualizado é
+    // gravado numa chave que ninguém mais vai ler. INCRBY 0 lê criando a
+    // chave em 0; null significa Redis fora, e aí não há cache nenhum —
+    // adivinhar a geração poderia servir uma entrada antiga.
+    const generation = await this.redis.incrBy(GENERATION_KEY, 0);
+    const key =
+      generation === null
+        ? null
+        : `dashboard:${viewer.role}:${viewer.id}:${today}:${generation}`;
 
+    const cached = key ? await this.redis.get(key) : null;
     if (cached) return JSON.parse(cached) as DashboardSummary;
 
     const row = await this.repository.summary(
@@ -64,14 +58,8 @@ export class DashboardService {
       this.clock.timezone(),
     );
 
-    // Os campos ficam BigInt aqui de propósito, como amount_cents em
-    // RequestsService.toResponse(): só o BigIntInterceptor global (resposta
-    // HTTP) ou convert() logo abaixo (gravação no Redis) fazem a conversão
-    // para Number — nunca Number(bigint) direto. Number(bigint) arredonda
-    // em silêncio acima de Number.MAX_SAFE_INTEGER em vez de lançar, que é
-    // exatamente a armadilha que BigIntInterceptor.convert() existe para
-    // fechar (Tarefa 7) e que idempotency.service.ts já evita do mesmo
-    // jeito antes de gravar no Redis.
+    // BigInt até a borda: o BigIntInterceptor (HTTP) e o convert() abaixo
+    // (Redis) lançam acima de MAX_SAFE_INTEGER, Number() arredondaria calado.
     const summary = {
       reference_date: today,
       pending_amount_cents: row.pending_amount_cents,
@@ -87,39 +75,16 @@ export class DashboardService {
       },
     };
 
-    // Sem reconferir a geração aqui de propósito: a chave já carrega a
-    // geração capturada ANTES da consulta acima, e um "reconfere e só grava
-    // se não mudou" ainda teria seu próprio intervalo entre o reconfere e o
-    // setNx — sempre sobra uma folga do tipo tempo-de-checagem-para-uso não
-    // importa quantas vezes se reconfira. Gravar incondicionalmente sob a
-    // chave `key` (já rotulada com a geração antiga, se foi o caso) é o que
-    // fecha a janela de verdade: se um invalidate() rodou enquanto esta
-    // consulta estava em voo, esta escrita cai numa chave que a geração
-    // NOVA nunca mais vai procurar — a leitura desatualizada não deixa de
-    // ser calculada, mas fica impedida de ser servida a mais ninguém, que é
-    // a garantia que importa.
-    await this.redis.setNx(
-      key,
-      JSON.stringify(convert(summary)),
-      CACHE_TTL_SECONDS,
-    );
+    const serialized = JSON.stringify(convert(summary));
+    if (key) await this.redis.setNx(key, serialized, CACHE_TTL_SECONDS);
 
     return summary;
   }
 
-  // Incrementa a geração em vez de apagar chaves por padrão. Apagar (a
-  // versão original deste método) só fecha a janela até a PRÓXIMA entrada
-  // ser gravada — e é exatamente uma entrada gravada depois do delete, mas
-  // calculada com dados de antes da escrita, que vazava um total
-  // desatualizado por até 60s (fix round 1, achado do revisor). Incrementar
-  // a geração faz qualquer consulta já em voo, mesmo que termine depois,
-  // gravar sob uma chave que a geração nova nunca mais consulta — a leitura
-  // desatualizada não é impedida de acontecer, mas é impedida de ser
-  // servida a mais alguém. As entradas da geração antiga não ficam mais
-  // alcançáveis por nenhum leitor futuro e caem sozinhas do TTL de 60s: não
-  // sobra necessidade de um del(pattern) aqui, só memória que o TTL já
-  // libera.
+  // Muda a geração em vez de apagar chaves: entradas antigas ficam
+  // inalcançáveis e expiram pelo TTL. Com o Redis fora o INCR se perde, e o
+  // pior caso é o cache antigo durar até o fim do TTL quando ele voltar.
   async invalidate(): Promise<void> {
-    await this.redis.incr(GENERATION_KEY);
+    await this.redis.incrBy(GENERATION_KEY, 1);
   }
 }
