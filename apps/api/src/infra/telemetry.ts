@@ -17,7 +17,13 @@ export function setupTelemetry(): void {
   sdk = new NodeSDK({
     serviceName: 'gex-api',
     traceExporter: new OTLPTraceExporter({ url: `${endpoint}/v1/traces` }),
-    instrumentations: [getNodeAutoInstrumentations()],
+    instrumentations: [
+      getNodeAutoInstrumentations({
+        // Só o nome do comando no span: as chaves do Redis carregam e-mails
+        // (rate limit) e ids, que não devem sair para o coletor.
+        '@opentelemetry/instrumentation-ioredis': { dbStatementSerializer: (command) => command },
+      }),
+    ],
   })
 
   sdk.start()
