@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { roleLabel } from '@/lib/format/labels'
-import { useUiStore } from '@/stores/ui-store'
+import { useToastStore } from '@/components/ui/toast-store'
 
 interface NavLink {
   href: string
@@ -38,7 +38,7 @@ export function AppNav({ user }: { user: SessionUser }) {
   const router = useRouter()
   const pathname = usePathname()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
-  const pushToast = useUiStore((state) => state.pushToast)
+  const pushToast = useToastStore((state) => state.pushToast)
 
   const links = user.role === 'REQUESTER' ? REQUESTER_LINKS : LINKS
   const active = activeHref(pathname, links)

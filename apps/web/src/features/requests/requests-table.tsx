@@ -1,7 +1,7 @@
 import { formatCentsToBrl, type RequestResponse } from '@gex/shared'
 import Link from 'next/link'
 import { EmptyState } from '@/components/ui/empty-state'
-import { StatusBadge } from '@/components/ui/status-badge'
+import { StatusBadge } from './status-badge'
 import { formatCalendarDate } from '@/lib/format/dates'
 
 export function RequestsTable({ rows }: { rows: RequestResponse[] }) {

@@ -1,14 +1,14 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useUiStore, type Toast } from '@/stores/ui-store'
+import { useToastStore, type Toast } from './toast-store'
 
 const AUTO_DISMISS_MS = 4000
 
 // A região aria-live fica sempre montada: leitores de tela só anunciam o que
 // é inserido numa região que já existia.
 export function Toaster() {
-  const toasts = useUiStore((state) => state.toasts)
+  const toasts = useToastStore((state) => state.toasts)
 
   return (
     <div aria-live="polite" className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
@@ -21,7 +21,7 @@ export function Toaster() {
 
 // Um timer por toast: um toast novo não reinicia a contagem dos anteriores.
 function ToastItem({ toast }: { toast: Toast }) {
-  const dismissToast = useUiStore((state) => state.dismissToast)
+  const dismissToast = useToastStore((state) => state.dismissToast)
 
   useEffect(() => {
     const timer = setTimeout(() => dismissToast(toast.id), AUTO_DISMISS_MS)

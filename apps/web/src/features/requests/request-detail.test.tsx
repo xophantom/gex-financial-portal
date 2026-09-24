@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { useUiStore } from '@/stores/ui-store'
+import { useToastStore } from '@/components/ui/toast-store'
 import { RequestDetail } from './request-detail'
 import { buildRequest } from './test-fixtures'
 
@@ -13,7 +13,7 @@ const baseRequest = buildRequest()
 // componente por render — sem isto, o diálogo aberto por um teste vazaria
 // para o próximo.
 beforeEach(() => {
-  useUiStore.setState({ openDialog: null, toasts: [] })
+  useToastStore.setState({ toasts: [] })
 })
 
 describe('RequestDetail — action gating', () => {

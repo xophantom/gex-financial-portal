@@ -9,13 +9,13 @@ import {
   type StatusEventResponse,
 } from '@gex/shared'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, type ReactNode } from 'react'
+import { useCallback, useState, type ReactNode } from 'react'
 import { DialogOverlay } from '@/components/ui/dialog'
-import { StatusBadge } from '@/components/ui/status-badge'
+import { useToastStore } from '@/components/ui/toast-store'
 import { formatCalendarDate, formatDate } from '@/lib/format/dates'
-import { useUiStore } from '@/stores/ui-store'
 import { DecisionDialog } from './decision-dialog'
 import { MarkPaidDialog } from './mark-paid-dialog'
+import { StatusBadge } from './status-badge'
 import { StatusTimeline } from './status-timeline'
 
 const SUCCESS_MESSAGE: Record<RequestAction, string> = {
@@ -36,15 +36,10 @@ export function RequestDetail({
   allowedActions: RequestAction[]
 }) {
   const router = useRouter()
-  const openDialog = useUiStore((state) => state.openDialog)
-  const setOpenDialog = useUiStore((state) => state.setOpenDialog)
-  const pushToast = useUiStore((state) => state.pushToast)
+  const [openDialog, setOpenDialog] = useState<RequestAction | null>(null)
+  const pushToast = useToastStore((state) => state.pushToast)
 
-  const closeDialog = useCallback(() => setOpenDialog(null), [setOpenDialog])
-
-  // A store sobrevive à navegação: sem isto, um diálogo deixado aberto
-  // reapareceria ao abrir outra solicitação.
-  useEffect(() => closeDialog, [closeDialog])
+  const closeDialog = useCallback(() => setOpenDialog(null), [])
 
   const handleSuccess = (action: RequestAction) => {
     closeDialog()
