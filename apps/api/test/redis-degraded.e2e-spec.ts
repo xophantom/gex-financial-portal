@@ -138,6 +138,10 @@ describe('with Redis unavailable', () => {
     SLOW_TEST_MS,
   )
 
+  // Com `docker pause`, os INCR que expiraram no cliente ainda chegam ao Redis
+  // no unpause; a garantia não depende disso: a primeira leitura depois da
+  // queda refaz a invalidação perdida (DashboardService.invalidationPending,
+  // com teste unitário próprio).
   it('reflects the writes made during the outage once Redis is back', async () => {
     const body = await summaryOf(finance)
 

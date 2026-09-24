@@ -134,8 +134,8 @@ no web e no shared).
 - **Redis é opcional.** Cacheia o dashboard, guarda chaves de idempotência e
   conta tentativas de login. Se cair, a API segue respondendo pelo banco
   (`/health` reporta `degraded`) e o rate limit de login falha aberto — o hash
-  argon2 continua encarecendo força bruta. Limitação: invalidações perdidas
-  durante a queda podem servir um resumo antigo por até 60 s após a volta.
+  argon2 continua encarecendo força bruta. Uma invalidação do cache perdida
+  durante a queda é refeita na primeira leitura depois que ele volta.
 - **Seed só cria o que falta.** Roda a cada subida do container sem desfazer
   aprovações ou pagamentos feitos durante a avaliação.
 - **Módulos desacoplados por evento.** Criar, decidir e pagar emitem

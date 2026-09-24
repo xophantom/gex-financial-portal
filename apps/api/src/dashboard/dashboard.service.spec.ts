@@ -13,6 +13,8 @@ const viewer: AuthenticatedUser = {
    Promise para bater com a assinatura real dos métodos assíncronos que
    substituem. */
 function build(row: DashboardSummaryRow, redisUp = true) {
+  // Mutável para simular a queda e a volta do Redis no meio de um teste.
+  const state = { redisUp }
   const repository = { summary: jest.fn(async () => row) }
   const clock = {
     today: jest.fn(() => '2026-09-18'),
@@ -23,14 +25,14 @@ function build(row: DashboardSummaryRow, redisUp = true) {
   // do ar, tudo devolve o valor neutro (null/false).
   const store = new Map<string, string>()
   const redis = {
-    get: jest.fn(async (key: string) => (redisUp ? (store.get(key) ?? null) : null)),
+    get: jest.fn(async (key: string) => (state.redisUp ? (store.get(key) ?? null) : null)),
     setNx: jest.fn(async (key: string, value: string) => {
-      if (!redisUp || store.has(key)) return false
+      if (!state.redisUp || store.has(key)) return false
       store.set(key, value)
       return true
     }),
     incrBy: jest.fn(async (key: string, by: number) => {
-      if (!redisUp) return null
+      if (!state.redisUp) return null
       const next = Number(store.get(key) ?? 0) + by
       store.set(key, String(next))
       return next
@@ -38,7 +40,7 @@ function build(row: DashboardSummaryRow, redisUp = true) {
   }
 
   const service = new DashboardService(repository as never, clock as never, redis as never)
-  return { service, repository, redis }
+  return { service, repository, redis, state }
 }
 /* eslint-enable @typescript-eslint/require-await */
 
@@ -97,6 +99,24 @@ describe('DashboardService — cache', () => {
     await service.invalidate()
     await service.summary(viewer)
 
+    expect(repository.summary).toHaveBeenCalledTimes(2)
+  })
+
+  // Sem refazer a invalidação perdida, a primeira leitura depois da volta
+  // serviria o resumo cacheado antes da queda, sem a escrita feita nela.
+  it('invalidates on the first read after an outage that swallowed an invalidation', async () => {
+    const { service, repository, state } = build(baseRow)
+
+    await service.summary(viewer)
+    state.redisUp = false
+    await service.invalidate()
+    state.redisUp = true
+
+    await service.summary(viewer)
+    expect(repository.summary).toHaveBeenCalledTimes(2)
+
+    // Refeita a invalidação, o cache volta a valer.
+    await service.summary(viewer)
     expect(repository.summary).toHaveBeenCalledTimes(2)
   })
 
