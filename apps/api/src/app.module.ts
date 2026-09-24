@@ -1,4 +1,5 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common'
+import { EventEmitterModule } from '@nestjs/event-emitter'
 import { LoggerModule } from 'nestjs-pino'
 import { AuthModule } from './auth/auth.module'
 import { CorrelationMiddleware } from './common/http/correlation.middleware'
@@ -15,6 +16,7 @@ import { RequestsModule } from './requests/requests.module'
     // A mesma instância de buildLogger() (redact + mixin de correlationId)
     // vira o logger interno do Nest inteiro, não só das requisições HTTP.
     LoggerModule.forRoot({ pinoHttp: { logger: buildLogger() } }),
+    EventEmitterModule.forRoot(),
     PrismaModule,
     ClockModule,
     RedisModule,

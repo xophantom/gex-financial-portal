@@ -49,13 +49,13 @@ function build(
     remember: jest.fn(async () => undefined),
     fingerprint: jest.fn(() => 'fingerprint'),
   }
-  const dashboard = { invalidate: jest.fn(async () => undefined) }
+  const events = { emitAsync: jest.fn(async () => []) }
 
   return new RequestsService(
     repository as never,
     clock as never,
     idempotency as never,
-    dashboard as never,
+    events as never,
   )
 }
 /* eslint-enable @typescript-eslint/require-await */
