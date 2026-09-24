@@ -15,6 +15,8 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @gex/api exec prisma generate
+      # @gex/shared resolve para packages/shared/dist (tipos e runtime).
+      - run: pnpm --filter @gex/shared build
       - run: pnpm lint
       - run: pnpm typecheck
 
@@ -26,15 +28,14 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
-      # Sem "--" antes de --coverage: pnpm repassa o argumento como está
-      # escrito, e o script por trás já é "vitest run" — um "--" extra vira
-      # o separador de padrão de teste do próprio Vitest, e --coverage é
-      # engolido como filtro em vez de virar a flag que liga a cobertura.
+      # Sem "--": o Vitest trataria --coverage como filtro de arquivo.
       - run: pnpm --filter @gex/shared test --coverage
+      - run: pnpm --filter @gex/shared build
       - run: pnpm --filter @gex/web test
 
   test-integration:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -67,10 +68,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @gex/api exec prisma generate
       - run: pnpm --filter @gex/api db:migrate
-      # O único portão que builda de verdade e sobe `node dist/...`: lint,
-      # typecheck, unitário e e2e transpilam TypeScript em tempo de execução
-      # e nunca tocam o artefato empacotado. Já pegou um binário quebrado
-      # com os outros quatro gates verdes (Task 10).
+      # Único job que sobe o artefato compilado (`node dist/...`); os demais
+      # transpilam TypeScript em tempo de execução.
       - run: pnpm --filter @gex/api test:smoke
 
   build:
