@@ -17,6 +17,7 @@ jobs:
       - run: pnpm --filter @gex/api exec prisma generate
       # @gex/shared resolve para packages/shared/dist (tipos e runtime).
       - run: pnpm --filter @gex/shared build
+      - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
 
