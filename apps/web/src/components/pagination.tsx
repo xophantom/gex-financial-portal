@@ -1,22 +1,29 @@
 'use client'
 
 import { parseAsInteger, useQueryState } from 'nuqs'
+import { useTransition } from 'react'
 
-// Só a página é gerida aqui: trocar de página nunca deve zerar os outros
-// filtros, ao contrário de trocar um filtro (que sempre volta para a página
-// 1, em requests-filters.tsx).
+const buttonClass =
+  'rounded-md border border-zinc-300 px-3 py-1.5 font-medium text-zinc-700 disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300'
+
+// Só a página é gerida aqui: trocar de página preserva os filtros atuais.
 export function Pagination({ page, totalPages }: { page: number; totalPages: number }) {
-  const [, setPage] = useQueryState('page', parseAsInteger.withDefault(1))
+  const [isPending, startTransition] = useTransition()
+  // shallow: false — a lista vem do Server Component da rota.
+  const [, setPage] = useQueryState(
+    'page',
+    parseAsInteger.withDefault(1).withOptions({ shallow: false, startTransition }),
+  )
 
   if (totalPages <= 1) return null
 
   return (
-    <nav aria-label="Paginação" className="flex items-center justify-between pt-4 text-sm">
+    <nav aria-label="Paginação" aria-busy={isPending} className="flex items-center justify-between pt-4 text-sm">
       <button
         type="button"
         onClick={() => setPage(page - 1)}
-        disabled={page <= 1}
-        className="rounded-md border border-zinc-300 px-3 py-1.5 font-medium text-zinc-700 disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300"
+        disabled={isPending || page <= 1}
+        className={buttonClass}
       >
         Anterior
       </button>
@@ -26,8 +33,8 @@ export function Pagination({ page, totalPages }: { page: number; totalPages: num
       <button
         type="button"
         onClick={() => setPage(page + 1)}
-        disabled={page >= totalPages}
-        className="rounded-md border border-zinc-300 px-3 py-1.5 font-medium text-zinc-700 disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300"
+        disabled={isPending || page >= totalPages}
+        className={buttonClass}
       >
         Próxima
       </button>
