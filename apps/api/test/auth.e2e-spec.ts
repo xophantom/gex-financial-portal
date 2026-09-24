@@ -115,6 +115,28 @@ describe('POST /auth/refresh', () => {
   )
 })
 
+describe('GET /auth/me', () => {
+  it('answers who the token belongs to, role included', async () => {
+    const token = await app.tokenFor('financeiro@gex.test', 'GexFinance123!')
+
+    const response = await request(app.server)
+      .get('/auth/me')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200)
+
+    expect(response.body).toEqual({
+      id: '10000000-0000-4000-8000-000000000003',
+      name: 'Fernanda Financeiro',
+      email: 'financeiro@gex.test',
+      role: 'FINANCE',
+    })
+  })
+
+  it('refuses a request without a token', async () => {
+    await request(app.server).get('/auth/me').expect(401)
+  })
+})
+
 describe('unknown routes', () => {
   it('answers 404 with a Portuguese message', async () => {
     const response = await request(app.server).get('/nao-existe').expect(404)

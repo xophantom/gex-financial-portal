@@ -8,7 +8,7 @@ import { Pagination } from '@/features/requests/pagination'
 import { RequestsFilters } from '@/features/requests/requests-filters'
 import { RequestsTable } from '@/features/requests/requests-table'
 import { ApiError, apiFetchForPage } from '@/lib/api/client'
-import { readSession } from '@/lib/session/server'
+import { getSessionUser } from '@/lib/session/user'
 
 export const metadata: Metadata = { title: 'Solicitações' }
 
@@ -29,8 +29,8 @@ export default async function RequestsPage({
   searchParams: Promise<SearchParams>
 }) {
   const params = await searchParams
-  const session = await readSession()
-  const canCreate = session?.user.role === 'REQUESTER'
+  const user = await getSessionUser()
+  const canCreate = user.role === 'REQUESTER'
 
   const status = first(params.status)
   const supplier = first(params.supplier)

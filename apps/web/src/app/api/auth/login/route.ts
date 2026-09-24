@@ -46,11 +46,7 @@ export async function POST(request: Request) {
 
   const auth = (await upstream.json()) as AuthResponse
 
-  await sealSession({
-    access_token: auth.access_token,
-    refresh_token: auth.refresh_token,
-    user: auth.user,
-  })
+  await sealSession({ access_token: auth.access_token, refresh_token: auth.refresh_token })
 
   return NextResponse.json({ user: auth.user })
 }

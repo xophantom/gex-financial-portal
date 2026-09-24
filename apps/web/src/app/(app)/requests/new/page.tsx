@@ -2,16 +2,16 @@ import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { PageHeader } from '@/components/layout/page-header'
 import { RequestForm } from '@/features/requests/request-form'
-import { readSession } from '@/lib/session/server'
+import { getSessionUser } from '@/lib/session/user'
 
 export const metadata: Metadata = { title: 'Nova solicitação' }
 
 export default async function NewRequestPage() {
-  const session = await readSession()
+  const user = await getSessionUser()
 
   // Só REQUESTER cria solicitações; a API também recusa, mas o financeiro
   // nem deveria ver um formulário que não pode enviar.
-  if (session?.user.role !== 'REQUESTER') redirect('/requests')
+  if (user.role !== 'REQUESTER') redirect('/requests')
 
   return (
     <>

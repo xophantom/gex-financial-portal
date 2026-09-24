@@ -54,7 +54,6 @@ describe('guardSession', () => {
       maxAge: 60 * 15,
     })
     expect(response.cookies.get('gex_refresh')?.value).toBe('novo-refresh')
-    expect(response.cookies.get('gex_user')?.value).toBe(JSON.stringify(renewed.user))
 
     // ...e o cookie reescrito no request que segue para o Server Component.
     expect(response.headers.get('x-middleware-request-cookie')).toContain('gex_access=novo-access')
@@ -63,10 +62,10 @@ describe('guardSession', () => {
   it('clears the session and redirects to /login when the refresh is rejected', async () => {
     vi.mocked(fetch).mockResolvedValue(Response.json({}, { status: 401 }))
 
-    const response = await guardSession(navigation('gex_refresh=expirado; gex_user=x'))
+    const response = await guardSession(navigation('gex_refresh=expirado'))
 
     expect(response.headers.get('location')).toBe('http://localhost/login')
-    for (const name of ['gex_access', 'gex_refresh', 'gex_user']) {
+    for (const name of ['gex_access', 'gex_refresh']) {
       expect(response.cookies.get(name)).toMatchObject({
         value: '',
         path: '/',

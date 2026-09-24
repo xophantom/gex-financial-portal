@@ -1,24 +1,21 @@
-import type { AuthResponse, SessionUser } from '@gex/shared'
 import { cookies } from 'next/headers'
 import {
   ACCESS_COOKIE,
   REFRESH_COOKIE,
   SESSION_COOKIE_NAMES,
-  USER_COOKIE,
   sessionCookies,
+  type TokenPair,
 } from './cookies'
 
 // Sessão lida e gravada via next/headers: só existe em Server Components,
 // Route Handlers e Server Actions. O proxy usa guard.ts.
 
-type TokenPair = Pick<AuthResponse, 'access_token' | 'refresh_token'>
-
 // Só funciona em Route Handlers e Server Actions: em Server Components,
 // cookies() é somente leitura e set() lança.
-export async function sealSession(auth: AuthResponse): Promise<void> {
+export async function sealSession(tokens: TokenPair): Promise<void> {
   const store = await cookies()
 
-  for (const { name, value, ...options } of sessionCookies(auth)) store.set(name, value, options)
+  for (const { name, value, ...options } of sessionCookies(tokens)) store.set(name, value, options)
 }
 
 export async function clearSession(): Promise<void> {
@@ -28,8 +25,8 @@ export async function clearSession(): Promise<void> {
 }
 
 // Uso interno do BFF (lib/api/client.ts): Bearer header e corpo do POST
-// /auth/refresh precisam dos tokens crus, não do usuário. Server Components
-// não devem chamar isto — devem chamar readSession().
+// /auth/refresh precisam dos tokens crus. Quem é o usuário vem de
+// getSessionUser() (lib/session/user.ts).
 export async function readTokens(): Promise<Partial<TokenPair>> {
   const store = await cookies()
 
@@ -39,18 +36,8 @@ export async function readTokens(): Promise<Partial<TokenPair>> {
   }
 }
 
-// É isto que os Server Components leem. Nunca devolve um objeto pela metade:
-// faltando o access token ou o usuário, o resultado é null.
-export async function readSession(): Promise<{ accessToken: string; user: SessionUser } | null> {
+export async function hasSessionCookies(): Promise<boolean> {
   const store = await cookies()
-  const accessToken = store.get(ACCESS_COOKIE)?.value
-  const rawUser = store.get(USER_COOKIE)?.value
 
-  if (!accessToken || !rawUser) return null
-
-  try {
-    return { accessToken, user: JSON.parse(rawUser) as SessionUser }
-  } catch {
-    return null
-  }
+  return store.has(ACCESS_COOKIE) || store.has(REFRESH_COOKIE)
 }
