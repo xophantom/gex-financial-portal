@@ -102,7 +102,7 @@ describe('RequestForm', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /cadastrar/i }))
 
-    expect(await screen.findByText(/categoria inválida/i)).toBeInTheDocument()
+    expect(await screen.findByText(/escolha a categoria/i)).toBeInTheDocument()
     expect(fetch).not.toHaveBeenCalled()
   })
 
@@ -144,6 +144,72 @@ describe('RequestForm', () => {
     await fill()
     await userEvent.click(screen.getByRole('button', { name: /cadastrar/i }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/já existe uma solicitação/i)
+    const invoice = screen.getByLabelText(/número da nota/i)
+    await waitFor(() => expect(invoice).toHaveAttribute('aria-invalid', 'true'))
+    expect(invoice).toHaveAccessibleDescription(/já existe uma solicitação/i)
+  })
+
+  it('asks for the due date instead of describing its format when it is empty', async () => {
+    render(<RequestForm />)
+    await userEvent.click(screen.getByRole('button', { name: /cadastrar/i }))
+
+    expect(await screen.findByText('Informe o vencimento')).toBeInTheDocument()
+    expect(screen.queryByText(/use o formato/i)).not.toBeInTheDocument()
+  })
+
+  it('shows the API message for errors that belong to no field', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: false,
+      status: 403,
+      json: async () => ({ error: { code: 'FORBIDDEN', message: 'Só solicitantes cadastram' } }),
+    } as Response)
+
+    render(<RequestForm />)
+    await fill()
+    await userEvent.click(screen.getByRole('button', { name: /cadastrar/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Só solicitantes cadastram')
+    expect(screen.getByRole('button', { name: /cadastrar/i })).toBeEnabled()
+  })
+
+  it('confirms the new request and links to it', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'new-id' }),
+    } as Response)
+
+    render(<RequestForm />)
+    await fill()
+    await userEvent.click(screen.getByRole('button', { name: /cadastrar/i }))
+
+    const heading = await screen.findByRole('heading', { name: 'Solicitação cadastrada' })
+    expect(heading).toHaveFocus()
+    expect(screen.getByText('NF-2026-9001')).toBeInTheDocument()
+    expect(screen.getByText('R$ 1.553,13')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Ver solicitação' })).toHaveAttribute(
+      'href',
+      '/requests/new-id',
+    )
+  })
+
+  it('starts a clean form with a new Idempotency-Key on "Cadastrar outra"', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'new-id' }),
+    } as Response)
+
+    render(<RequestForm />)
+    await fill()
+    await userEvent.click(screen.getByRole('button', { name: /cadastrar solicitação/i }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Cadastrar outra' }))
+
+    expect(screen.getByLabelText(/fornecedor/i)).toHaveValue('')
+    await fill()
+    await userEvent.click(screen.getByRole('button', { name: /cadastrar solicitação/i }))
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2))
+
+    const keyOf = (call: number) =>
+      (vi.mocked(fetch).mock.calls[call][1]?.headers as Record<string, string>)['Idempotency-Key']
+    expect(keyOf(0)).not.toBe(keyOf(1))
   })
 })

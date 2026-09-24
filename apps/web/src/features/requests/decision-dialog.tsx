@@ -1,74 +1,87 @@
 'use client'
 
 import type { DecisionInput } from '@gex/shared'
-import { useId, useState } from 'react'
-import { DialogActions, DialogError } from '@/components/ui/dialog'
+import { useState } from 'react'
+import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
+import { Textarea } from '@/components/ui/textarea'
+import { ActionDialog } from './action-dialog'
 import { useActionSubmit } from './use-action-submit'
 
 type Decision = DecisionInput['decision']
 
-const DECISION_TITLES: Record<Decision, string> = {
-  APPROVE: 'Aprovar solicitação',
-  REJECT: 'Rejeitar solicitação',
-}
-
-const fieldClass =
-  'w-full rounded-md border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950'
-const labelClass = 'block text-sm font-medium text-zinc-800 dark:text-zinc-200'
-
 export interface DecisionDialogProps {
   requestId: string
+  supplierName: string
   decision: Decision
-  onClose: () => void
+  open: boolean
+  onOpenChange: (open: boolean) => void
   onSuccess: () => void
 }
 
 // A decisão é fixa por diálogo: o servidor já definiu, via allowed_actions,
 // quais botões existem.
-export function DecisionDialog({ requestId, decision, onClose, onSuccess }: DecisionDialogProps) {
-  const titleId = useId()
+export function DecisionDialog({
+  requestId,
+  supplierName,
+  decision,
+  open,
+  onOpenChange,
+  onSuccess,
+}: DecisionDialogProps) {
   const [reason, setReason] = useState('')
-  const { error, setError, isSubmitting, submit } = useActionSubmit(onSuccess)
+  // Erro de preenchimento fica no campo; o erro da API, no alerta do diálogo.
+  const [reasonError, setReasonError] = useState<string | null>(null)
+  const { error, isSubmitting, submit } = useActionSubmit(onSuccess)
+  const isReject = decision === 'REJECT'
 
   const handleConfirm = () => {
-    if (decision === 'REJECT' && reason.trim() === '') {
-      setError('Informe o motivo da rejeição')
+    if (isReject && reason.trim() === '') {
+      setReasonError('Informe o motivo da rejeição.')
       return
     }
 
     void submit(`/api/requests/${requestId}/decision`, {
       decision,
-      reason: decision === 'REJECT' ? reason : undefined,
+      reason: isReject ? reason : undefined,
     })
   }
 
   return (
-    <div role="dialog" aria-modal="true" aria-labelledby={titleId} className="space-y-3">
-      <h2 id={titleId} className="text-base font-semibold text-zinc-950 dark:text-zinc-50">
-        {DECISION_TITLES[decision]}
-      </h2>
-
-      {decision === 'REJECT' ? (
-        <div className="space-y-1">
-          <label htmlFor="reason" className={labelClass}>
-            Motivo
-          </label>
-          <textarea
+    <ActionDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={isReject ? 'Rejeitar solicitação' : 'Aprovar solicitação'}
+      description={
+        isReject
+          ? `A solicitação de ${supplierName} será encerrada. O motivo fica no histórico e o solicitante vê.`
+          : `A solicitação de ${supplierName} fica liberada para pagamento.`
+      }
+      confirmLabel={isReject ? 'Rejeitar' : 'Aprovar'}
+      tone={isReject ? 'reject' : 'approve'}
+      error={error}
+      isSubmitting={isSubmitting}
+      onConfirm={handleConfirm}
+    >
+      {isReject && (
+        <Field data-invalid={Boolean(reasonError) || undefined}>
+          <FieldLabel htmlFor="reason">Motivo</FieldLabel>
+          <Textarea
             id="reason"
             rows={3}
             value={reason}
-            onChange={(event) => setReason(event.target.value)}
-            className={fieldClass}
+            onChange={(event) => {
+              setReason(event.target.value)
+              setReasonError(null)
+            }}
+            aria-invalid={Boolean(reasonError) || undefined}
+            aria-describedby={reasonError ? 'reason-hint reason-error' : 'reason-hint'}
           />
-        </div>
-      ) : (
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          Confirma a aprovação desta solicitação?
-        </p>
+          <FieldDescription id="reason-hint">
+            Ex.: nota emitida com CNPJ de outra filial.
+          </FieldDescription>
+          {reasonError && <FieldError id="reason-error">{reasonError}</FieldError>}
+        </Field>
       )}
-
-      <DialogError message={error} />
-      <DialogActions onClose={onClose} onConfirm={handleConfirm} isSubmitting={isSubmitting} />
-    </div>
+    </ActionDialog>
   )
 }

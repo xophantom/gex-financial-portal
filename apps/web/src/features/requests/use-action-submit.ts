@@ -26,7 +26,7 @@ export function useActionSubmit(onSuccess: () => void) {
 
       if (!response.ok) {
         const body: Partial<ErrorEnvelope> | null = await response.json().catch(() => null)
-        setError(body?.error?.message ?? 'Erro inesperado')
+        setError(body?.error?.message ?? 'A ação não foi concluída. Tente novamente em instantes.')
         return
       }
 
@@ -39,5 +39,5 @@ export function useActionSubmit(onSuccess: () => void) {
     }
   }
 
-  return { error, setError, isSubmitting, submit }
+  return { error, isSubmitting, submit }
 }
