@@ -57,41 +57,49 @@ aprovações simultâneas da mesma solicitação contra a API em
 que o índice único do banco e o `SELECT ... FOR UPDATE` arbitram a corrida em
 vez de deixar duas requisições concorrentes criarem ou aprovarem em duplicado.
 
+## Estrutura
+
+```text
+apps/api         NestJS + Prisma (migrations e seed em apps/api/prisma)
+apps/web         Next.js (App Router); rotas em app/api fazem de BFF e guardam o JWT em cookie httpOnly
+packages/shared  regras de domínio puras: dinheiro, CNPJ, competência, máquina de status e schemas Zod
+data/            dados fornecidos pelo desafio, carregados pelo seed sem alteração
+```
+
 ## Decisões e trade-offs
 
 - **Dinheiro em centavos, sempre.** `amount_cents` é inteiro do formulário ao
-  banco (`BIGINT`); nenhuma camada usa `float`/`double`, então não há erro de
-  arredondamento acumulado.
+  banco (`BIGINT` com `CHECK > 0`); nenhuma camada usa `float`. Digitar no
+  campo de valor desloca os dígitos como centavos; colar `1.553,13`,
+  `R$ 2.000,00` ou `10` passa pelo mesmo parser testado em `@gex/shared`.
 - **`DATE` para vencimento e competência**, não `TIMESTAMP`: a data de um
-  boleto não muda por causa de fuso horário. `APP_TIMEZONE` só entra na
-  exibição e no cálculo de "vencido"/"pago no mês".
-- **`SELECT ... FOR UPDATE`, não lock otimista.** A janela de disputa (duas
-  aprovações quase simultâneas) é curta e rara; travar a linha durante a
-  transição é mais simples de raciocinar do que retry com `version` e
-  reconciliar o que fazer quando ele falha.
-- **Sem TanStack Query.** Foi instalado no início e removido ao construir: com
-  Server Components buscando `cache: 'no-store'`, não sobra cache de cliente
-  para ele gerenciar, e depois de uma mutação `router.refresh()` invalida na
-  fonte. Zustand ficou (fila de toasts e estado do modal de decisão, que é
-  compartilhado entre lista e detalhe) e nuqs também (filtros e paginação na
-  URL, o que torna a busca compartilhável e faz o botão voltar funcionar).
-  Biblioteca que não resolve um problema presente é peso, não arquitetura.
-- **Redis nunca é fonte de verdade.** Cacheia o resumo do dashboard e guarda
-  chaves de idempotência; some do ar e a API cai para `degraded`, nunca para
-  dado incorreto — a garantia de unicidade (CNPJ + nota) mora no índice único
-  do Postgres, não no cache.
-- **404, não 403, para solicitação de outra pessoa.** Um `REQUESTER`
-  consultando o registro de outro solicitante recebe "não encontrado": o
-  escopo entra no `WHERE` da consulta, então o registro alheio simplesmente
-  não existe para quem pergunta. Evita confirmar a existência de um recurso
-  que o usuário não deveria nem saber que existe.
-- **Sem fila de mensagens.** Todo fluxo (criar, decidir, marcar como pago) é
-  uma operação síncrona de request/resposta protegida por uma transação
-  Postgres; não há passo lento nem trabalho a desacoplar que justifique o
-  custo operacional de um broker.
-- **`@tanstack/react-query` foi removido** por não ter uso: todo Server
-  Component busca dado com `cache: 'no-store'`, então não existe cache de
-  cliente para gerenciar, e uma mutação chama `router.refresh()` para
-  invalidar direto na fonte. Zustand (toasts, diálogo de decisão) e nuqs
-  (filtros na URL) continuam, porque resolvem um problema real que o
-  React Query não resolveria melhor.
+  boleto não muda com o fuso. `APP_TIMEZONE` só entra na exibição e nas regras
+  de calendário ("vencida", "pago no mês").
+- **Data de pagamento é um dado próprio**, informada como `AAAA-MM-DD`, gravada
+  ao meio-dia de São Paulo e validada: não pode ser futura nem anterior à
+  criação da solicitação.
+- **Integridade no banco, não só na API.** Índice único em (CNPJ, nota) e
+  `CHECK` para valor positivo, formato da competência, motivo na rejeição e
+  data/referência no pagamento. O número da nota é normalizado (trim,
+  maiúsculas) para `nf-1` e `NF-1` colidirem.
+- **`SELECT ... FOR UPDATE`, não lock otimista.** Travar a linha durante a
+  transição é mais simples de raciocinar do que retry com `version`; status e
+  evento de auditoria são gravados na mesma transação.
+- **404, não 403, para solicitação de outra pessoa.** O escopo entra no
+  `WHERE`: o registro alheio não existe para quem pergunta.
+- **Erros num envelope único** (`{ error: { code, message, details? } }`):
+  422 para qualquer dado inválido, 409 para duplicidade ou transição inválida.
+- **Redis é opcional.** Cacheia o dashboard, guarda chaves de idempotência e
+  conta tentativas de login. Se cair, a API segue respondendo pelo banco
+  (`/health` reporta `degraded`) e o rate limit de login falha aberto — o hash
+  argon2 continua encarecendo força bruta. Limitação: invalidações perdidas
+  durante a queda podem servir um resumo antigo por até 60 s após a volta.
+- **Seed só cria o que falta.** Roda a cada subida do container sem desfazer
+  aprovações ou pagamentos feitos durante a avaliação.
+- **Sem TanStack Query.** Server Components buscam com `cache: 'no-store'` e
+  mutações chamam `router.refresh()`, então não sobra cache de cliente para
+  gerenciar. Zustand guarda toasts e o diálogo aberto; nuqs mantém filtros e
+  página na URL (busca compartilhável, botão voltar funciona).
+- **Observabilidade.** Logs estruturados (pino) com `x-correlation-id` e
+  redação de credenciais e dados financeiros; traces OpenTelemetry visíveis no
+  Jaeger.
