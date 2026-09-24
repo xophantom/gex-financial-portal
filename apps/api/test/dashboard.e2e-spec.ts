@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { DashboardSummaryResponse } from '@gex/shared';
 import { PrismaClient } from '@prisma/client';
 import argon2 from 'argon2';
 import request from 'supertest';
-import { createTestApp, TestApp } from './helpers';
+import { createTestApp, TestApp } from './support/test-app';
 
 interface ExpectedBlock {
   request_count: number;
@@ -19,16 +20,6 @@ interface Expected {
   reference_date: string;
   finance: ExpectedBlock;
   requesters: Record<string, ExpectedBlock>;
-}
-
-interface DashboardSummary {
-  reference_date: string;
-  pending_amount_cents: number;
-  approved_amount_cents: number;
-  paid_this_month_amount_cents: number;
-  overdue_count: number;
-  request_count: number;
-  status_counts: Record<string, number>;
 }
 
 const expected = JSON.parse(
@@ -64,9 +55,9 @@ const summary = (token: string) =>
     .get('/dashboard/summary')
     .set('Authorization', `Bearer ${token}`);
 
-const summaryOf = async (token: string): Promise<DashboardSummary> => {
+const summaryOf = async (token: string): Promise<DashboardSummaryResponse> => {
   const response = await summary(token).expect(200);
-  return response.body as DashboardSummary;
+  return response.body as DashboardSummaryResponse;
 };
 
 const decide = (token: string, id: string, payload: object) =>

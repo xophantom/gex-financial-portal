@@ -1,10 +1,12 @@
 import { Prisma } from '@prisma/client';
 import type { CreateRequestInput } from '@gex/shared';
+import type { AuthenticatedUser } from '../auth/authenticated-user';
 import { RequestsService } from './requests.service';
-import type { Viewer } from './requests.repository';
 
-const requester: Viewer = {
+const requester: AuthenticatedUser = {
   id: '10000000-0000-4000-8000-000000000001',
+  name: 'Ana',
+  email: 'solicitante@gex.test',
   role: 'REQUESTER',
 };
 
@@ -34,10 +36,13 @@ function fabricateP2002(
 /* eslint-disable @typescript-eslint/require-await -- fakes precisam devolver
    Promise para bater com a assinatura real dos métodos assíncronos que
    substituem. */
-function build(createImpl: () => Promise<unknown>) {
+function build(
+  createImpl: () => Promise<unknown>,
+  findOneImpl: () => Promise<unknown> = async () => null,
+) {
   const repository = {
     create: jest.fn(createImpl),
-    findOne: jest.fn(async () => null),
+    findOne: jest.fn(findOneImpl),
   };
   const clock = { today: jest.fn(() => '2026-09-18') };
   const idempotency = {
@@ -97,5 +102,55 @@ describe('RequestsService.create — mapping P2002 to DUPLICATE_INVOICE', () => 
     const service = build(() => Promise.reject(error));
 
     await expect(service.create(input, requester)).rejects.toBe(error);
+  });
+});
+
+// Linha como o Prisma a devolve (amountCents em BigInt), com o requester e o
+// histórico que o repositório inclui.
+const storedRow = (amountCents: bigint) => ({
+  id: '20000000-0000-4000-8000-000000000001',
+  requesterId: requester.id,
+  supplierName: 'Fornecedor Teste',
+  supplierCnpj: '10000000000145',
+  invoiceNumber: 'NF-0001',
+  amountCents,
+  competence: '2026-09',
+  dueDate: new Date('2026-09-30T00:00:00Z'),
+  category: 'SERVICOS' as const,
+  description: null,
+  status: 'PENDING' as const,
+  rejectionReason: null,
+  paidAt: null,
+  paymentReference: null,
+  createdAt: new Date('2026-09-01T12:00:00Z'),
+  updatedAt: new Date('2026-09-01T12:00:00Z'),
+  requester: { id: requester.id, name: requester.name },
+  events: [],
+});
+
+describe('RequestsService — response mapping', () => {
+  it('returns amount_cents as a number and the accented category label', async () => {
+    const service = build(
+      () => Promise.reject(new Error('unused')),
+      () => Promise.resolve(storedRow(155_313n)),
+    );
+
+    const { request } = await service.findOne(storedRow(0n).id, requester);
+
+    expect(request.amount_cents).toBe(155_313);
+    expect(typeof request.amount_cents).toBe('number');
+    expect(request.category).toBe('SERVIÇOS');
+  });
+
+  // Number(bigint) arredondaria em silêncio acima de MAX_SAFE_INTEGER.
+  it('throws instead of silently rounding an amount above Number.MAX_SAFE_INTEGER', async () => {
+    const service = build(
+      () => Promise.reject(new Error('unused')),
+      () => Promise.resolve(storedRow(BigInt(Number.MAX_SAFE_INTEGER) + 10n)),
+    );
+
+    await expect(service.findOne(storedRow(0n).id, requester)).rejects.toThrow(
+      /safe integer range/,
+    );
   });
 });

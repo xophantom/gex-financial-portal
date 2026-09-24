@@ -1,23 +1,11 @@
-import { ClockService } from '../src/clock/clock.service';
-import type { DashboardSummary } from '../src/dashboard/dashboard.service';
+import type { AuthenticatedUser } from '../src/auth/authenticated-user';
+import type { DashboardSummaryRow } from '../src/dashboard/dashboard.repository';
 import { DashboardService } from '../src/dashboard/dashboard.service';
-import { RedisService } from '../src/redis/redis.service';
-import type { Viewer } from '../src/requests/requests.repository';
-import { startTestRedis, stopTestRedis } from './testcontainers';
+import { ClockService } from '../src/infra/clock/clock.service';
+import { RedisService } from '../src/infra/redis/redis.service';
+import { startTestRedis, stopTestRedis } from './support/containers';
 
-interface FakeRow {
-  pending_amount_cents: bigint;
-  approved_amount_cents: bigint;
-  paid_this_month_amount_cents: bigint;
-  overdue_count: bigint;
-  request_count: bigint;
-  pending_count: bigint;
-  approved_count: bigint;
-  rejected_count: bigint;
-  paid_count: bigint;
-}
-
-const row = (pendingAmountCents: bigint): FakeRow => ({
+const row = (pendingAmountCents: bigint): DashboardSummaryRow => ({
   pending_amount_cents: pendingAmountCents,
   approved_amount_cents: 0n,
   paid_this_month_amount_cents: 0n,
@@ -29,8 +17,10 @@ const row = (pendingAmountCents: bigint): FakeRow => ({
   paid_count: 0n,
 });
 
-const viewer: Viewer = {
-  id: '10000000-0000-4000-8000-000000000001',
+const viewer: AuthenticatedUser = {
+  id: '10000000-0000-4000-8000-000000000003',
+  name: 'Financeiro',
+  email: 'financeiro@gex.test',
   role: 'FINANCE',
 };
 
@@ -60,7 +50,7 @@ describe('DashboardService cache-aside ordering', () => {
   });
 
   it('never lets a query that resolves after a concurrent invalidate() poison the cache with a stale total', async () => {
-    let resolveSlowQuery: (value: FakeRow) => void = () => {
+    let resolveSlowQuery: (value: DashboardSummaryRow) => void = () => {
       throw new Error('resolveSlowQuery called before being assigned');
     };
     let markQueryStarted: () => void = () => {};
@@ -71,7 +61,7 @@ describe('DashboardService cache-aside ordering', () => {
     const repository = {
       summary: jest.fn(() => {
         markQueryStarted();
-        return new Promise<FakeRow>((resolve) => {
+        return new Promise<DashboardSummaryRow>((resolve) => {
           resolveSlowQuery = resolve;
         });
       }),
@@ -88,8 +78,8 @@ describe('DashboardService cache-aside ordering', () => {
 
     // Só agora a consulta "lenta" de A resolve, com o valor PRÉ-escrita.
     resolveSlowQuery(row(100_000n));
-    const resultA = (await readA) as DashboardSummary;
-    expect(Number(resultA.pending_amount_cents)).toBe(100_000);
+    const resultA = await readA;
+    expect(resultA.pending_amount_cents).toBe(100_000);
 
     // Leitor C, depois de tudo: tem que ver o valor PÓS-escrita — nunca o
     // que A tentou gravar depois do invalidate() de B.
@@ -101,9 +91,9 @@ describe('DashboardService cache-aside ordering', () => {
       clock,
       redis,
     );
-    const resultC = (await serviceForC.summary(viewer)) as DashboardSummary;
+    const resultC = await serviceForC.summary(viewer);
 
-    expect(Number(resultC.pending_amount_cents)).toBe(999_000);
+    expect(resultC.pending_amount_cents).toBe(999_000);
     // Confirma que C de fato bateu no repositório (cache miss) — se C
     // tivesse lido o valor que A gravou depois do invalidate, o mock acima
     // nunca seria chamado e este teste passaria pelo motivo errado.

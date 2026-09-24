@@ -1,6 +1,7 @@
+import type { ErrorEnvelope, RequestDetailResponse } from '@gex/shared';
 import { PrismaClient } from '@prisma/client';
 import request from 'supertest';
-import { createTestApp, TestApp } from './helpers';
+import { createTestApp, TestApp } from './support/test-app';
 
 let app: TestApp;
 let finance: string;
@@ -13,43 +14,6 @@ const PENDING_OF_ANA = '20000000-0000-4000-8000-000000000001';
 const APPROVED_ID = '20000000-0000-4000-8000-000000000006';
 const REJECTED_ID = '20000000-0000-4000-8000-000000000015';
 const PAID_ID = '20000000-0000-4000-8000-000000000010';
-
-interface Actor {
-  id: string;
-  name: string;
-}
-
-interface HistoryEvent {
-  id: string;
-  previous_status: string | null;
-  new_status: string;
-  reason: string | null;
-  created_at: string;
-  actor: Actor;
-}
-
-interface RequestBody {
-  id: string;
-  status: string;
-  paid_at: string | null;
-  payment_reference: string | null;
-  created_at: string;
-  requester: Actor;
-}
-
-interface RequestDetailBody {
-  request: RequestBody;
-  history: HistoryEvent[];
-  allowed_actions: string[];
-}
-
-interface ErrorBody {
-  error: {
-    code: string;
-    message: string;
-    details?: { field: string; message: string }[];
-  };
-}
 
 beforeAll(async () => {
   app = await createTestApp();
@@ -84,9 +48,9 @@ const markPaid = (token: string, id: string, payload: object) =>
 const detailOf = async (
   token: string,
   id: string,
-): Promise<RequestDetailBody> => {
+): Promise<RequestDetailResponse> => {
   const response = await get(token, id);
-  return response.body as RequestDetailBody;
+  return response.body as RequestDetailResponse;
 };
 
 // Promise.all sozinho não garante a sobreposição. Uma segunda conexão prende
@@ -158,7 +122,7 @@ const withHeldLock = async <T>(
 describe('GET /requests/:id', () => {
   it('returns the request with its seeded history', async () => {
     const response = await get(finance, PAID_ID).expect(200);
-    const body = response.body as RequestDetailBody;
+    const body = response.body as RequestDetailResponse;
 
     expect(body.history).toHaveLength(3);
     expect(body.history.map((event) => event.new_status)).toEqual([
@@ -197,7 +161,7 @@ describe('GET /requests/:id', () => {
 
   it('refuses a malformed id with 422, like any other invalid input', async () => {
     const response = await get(finance, 'not-a-uuid').expect(422);
-    const body = response.body as ErrorBody;
+    const body = response.body as ErrorEnvelope;
 
     expect(body.error).toEqual({
       code: 'VALIDATION_ERROR',
@@ -207,7 +171,7 @@ describe('GET /requests/:id', () => {
 
   it("returns 404, not 403, for another requester's request", async () => {
     const response = await get(bruno, PENDING_OF_ANA).expect(404);
-    const body = response.body as ErrorBody;
+    const body = response.body as ErrorEnvelope;
     expect(body.error.code).toBe('NOT_FOUND');
   });
 });
@@ -217,7 +181,7 @@ describe('POST /requests/:id/decision', () => {
     const response = await decide(ana, PENDING_OF_ANA, {
       decision: 'APPROVE',
     }).expect(403);
-    const body = response.body as ErrorBody;
+    const body = response.body as ErrorEnvelope;
     expect(body.error.code).toBe('FORBIDDEN');
   });
 
@@ -232,7 +196,7 @@ describe('POST /requests/:id/decision', () => {
     const response = await decide(finance, PENDING_OF_ANA, {
       decision: 'REJECT',
     }).expect(422);
-    const body = response.body as ErrorBody;
+    const body = response.body as ErrorEnvelope;
     expect(body.error.details?.some((d) => d.field === 'reason')).toBe(true);
   });
 
@@ -263,7 +227,7 @@ describe('POST /requests/:id/decision', () => {
     const response = await decide(finance, APPROVED_ID, {
       decision: 'APPROVE',
     }).expect(409);
-    const body = response.body as ErrorBody;
+    const body = response.body as ErrorEnvelope;
     expect(body.error.code).toBe('INVALID_TRANSITION');
   });
 
@@ -314,7 +278,7 @@ describe('POST /requests/:id/mark-paid', () => {
       payment_reference: 'PAG-X',
     }).expect(409);
 
-    const body = response.body as ErrorBody;
+    const body = response.body as ErrorEnvelope;
     expect(body.error.code).toBe('INVALID_TRANSITION');
   });
 
@@ -331,7 +295,7 @@ describe('POST /requests/:id/mark-paid', () => {
       payment_reference: 'PAG-X',
     }).expect(422);
 
-    const body = response.body as ErrorBody;
+    const body = response.body as ErrorEnvelope;
     expect(body.error.code).toBe('VALIDATION_ERROR');
     expect(body.error.details).toEqual([
       { field: 'paid_at', message: 'A data de pagamento não pode ser futura' },
@@ -350,7 +314,7 @@ describe('POST /requests/:id/mark-paid', () => {
       payment_reference: 'PAG-X',
     }).expect(422);
 
-    const body = response.body as ErrorBody;
+    const body = response.body as ErrorEnvelope;
     expect(body.error.code).toBe('VALIDATION_ERROR');
     expect(body.error.details?.map((d) => d.field)).toEqual(['paid_at']);
   });
@@ -369,7 +333,7 @@ describe('POST /requests/:id/mark-paid', () => {
       payment_reference: 'PAG-X',
     }).expect(422);
 
-    const body = response.body as ErrorBody;
+    const body = response.body as ErrorEnvelope;
     expect(body.error.code).toBe('VALIDATION_ERROR');
     expect(body.error.details).toEqual([
       {

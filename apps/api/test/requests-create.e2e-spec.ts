@@ -1,7 +1,13 @@
 import { randomUUID } from 'node:crypto';
+import type {
+  ErrorEnvelope,
+  RequestDetailResponse,
+  RequestListResponse,
+  RequestResponse,
+} from '@gex/shared';
 import { PrismaClient } from '@prisma/client';
 import request from 'supertest';
-import { createTestApp, TestApp } from './helpers';
+import { createTestApp, TestApp } from './support/test-app';
 
 let app: TestApp;
 let requester: string;
@@ -9,37 +15,6 @@ let finance: string;
 let bruno: string;
 // Prisma direto: conferir a corrida pela coluna crua, não pela leitura sob teste.
 let db: PrismaClient;
-
-interface CreatedRequest {
-  id: string;
-  amount_cents: number;
-  status: string;
-  supplier_cnpj: string;
-  invoice_number: string;
-  competence: string;
-  requester: { id: string; name: string };
-}
-
-interface HistoryEvent {
-  previous_status: string | null;
-  new_status: string;
-}
-
-interface RequestDetail {
-  history: HistoryEvent[];
-}
-
-interface ErrorBody {
-  error: {
-    code: string;
-    message: string;
-    details?: { field: string; message: string }[];
-  };
-}
-
-interface RequestListBody {
-  data: { invoice_number: string }[];
-}
 
 const body = () => ({
   supplier_name: 'Fornecedor Teste',
@@ -78,7 +53,7 @@ const post = (token: string, payload: object, key?: string) => {
 describe('POST /requests', () => {
   it('creates a request and stores the amount in cents', async () => {
     const response = await post(requester, body()).expect(201);
-    const created = response.body as CreatedRequest;
+    const created = response.body as RequestResponse;
 
     expect(created.amount_cents).toBe(155313);
     expect(created.status).toBe('PENDING');
@@ -88,13 +63,13 @@ describe('POST /requests', () => {
 
   it('records a creation event in the audit trail', async () => {
     const createdResponse = await post(requester, body()).expect(201);
-    const created = createdResponse.body as CreatedRequest;
+    const created = createdResponse.body as RequestResponse;
 
     const detailResponse = await request(app.server)
       .get(`/requests/${created.id}`)
       .set('Authorization', `Bearer ${requester}`)
       .expect(200);
-    const detail = detailResponse.body as RequestDetail;
+    const detail = detailResponse.body as RequestDetailResponse;
 
     expect(detail.history).toHaveLength(1);
     expect(detail.history[0]).toMatchObject({
@@ -108,7 +83,7 @@ describe('POST /requests', () => {
     await post(requester, payload).expect(201);
 
     const conflictResponse = await post(requester, payload).expect(409);
-    const conflict = conflictResponse.body as ErrorBody;
+    const conflict = conflictResponse.body as ErrorEnvelope;
 
     expect(conflict.error.code).toBe('DUPLICATE_INVOICE');
   });
@@ -119,7 +94,7 @@ describe('POST /requests', () => {
       ...payload,
       invoice_number: payload.invoice_number.toLowerCase(),
     }).expect(201);
-    expect((created.body as CreatedRequest).invoice_number).toBe(
+    expect((created.body as RequestResponse).invoice_number).toBe(
       payload.invoice_number.toUpperCase(),
     );
 
@@ -127,7 +102,9 @@ describe('POST /requests', () => {
       ...payload,
       invoice_number: `  ${payload.invoice_number.toUpperCase()} `,
     }).expect(409);
-    expect((conflict.body as ErrorBody).error.code).toBe('DUPLICATE_INVOICE');
+    expect((conflict.body as ErrorEnvelope).error.code).toBe(
+      'DUPLICATE_INVOICE',
+    );
   });
 
   it('creates exactly one row when two identical requests race', async () => {
@@ -148,7 +125,7 @@ describe('POST /requests', () => {
         `/requests?supplier=${encodeURIComponent(payload.supplier_name)}&page_size=100`,
       )
       .set('Authorization', `Bearer ${finance}`);
-    const list = listResponse.body as RequestListBody;
+    const list = listResponse.body as RequestListResponse;
 
     const matches = list.data.filter(
       (row) => row.invoice_number === payload.invoice_number,
@@ -186,8 +163,8 @@ describe('POST /requests', () => {
 
     const firstResponse = await post(requester, payload, key).expect(201);
     const secondResponse = await post(requester, payload, key).expect(201);
-    const first = firstResponse.body as CreatedRequest;
-    const second = secondResponse.body as CreatedRequest;
+    const first = firstResponse.body as RequestResponse;
+    const second = secondResponse.body as RequestResponse;
 
     expect(second.id).toBe(first.id);
   });
@@ -201,8 +178,8 @@ describe('POST /requests', () => {
 
     const anaResponse = await post(requester, anaPayload, key).expect(201);
     const brunoResponse = await post(bruno, brunoPayload, key).expect(201);
-    const ana = anaResponse.body as CreatedRequest;
-    const brunoCreated = brunoResponse.body as CreatedRequest;
+    const ana = anaResponse.body as RequestResponse;
+    const brunoCreated = brunoResponse.body as RequestResponse;
 
     expect(brunoCreated.invoice_number).toBe(brunoPayload.invoice_number);
     expect(brunoCreated.invoice_number).not.toBe(ana.invoice_number);
@@ -226,11 +203,11 @@ describe('POST /requests', () => {
     const payload = body();
 
     const anaResponse = await post(requester, payload, key).expect(201);
-    const ana = anaResponse.body as CreatedRequest;
+    const ana = anaResponse.body as RequestResponse;
 
     const brunoResponse = await post(bruno, payload, key);
     expect(brunoResponse.status).toBe(409);
-    const brunoError = brunoResponse.body as ErrorBody;
+    const brunoError = brunoResponse.body as ErrorEnvelope;
     expect(brunoError.error.code).toBe('DUPLICATE_INVOICE');
 
     // Nunca a resposta cacheada de Ana: nem o id, nem o dono.
@@ -249,8 +226,8 @@ describe('POST /requests', () => {
     const secondResponse = await post(requester, secondPayload, key).expect(
       201,
     );
-    const first = firstResponse.body as CreatedRequest;
-    const second = secondResponse.body as CreatedRequest;
+    const first = firstResponse.body as RequestResponse;
+    const second = secondResponse.body as RequestResponse;
 
     expect(second.id).not.toBe(first.id);
     expect(second.invoice_number).toBe(secondPayload.invoice_number);
@@ -280,7 +257,7 @@ describe('POST /requests', () => {
       ...body(),
       ...patch,
     }).expect(422);
-    const error = response.body as ErrorBody;
+    const error = response.body as ErrorEnvelope;
 
     expect(error.error.code).toBe('VALIDATION_ERROR');
     expect(error.error.details?.some((d) => d.field === field)).toBe(true);

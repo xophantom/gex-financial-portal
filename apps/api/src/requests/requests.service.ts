@@ -7,19 +7,21 @@ import {
   type DecisionInput,
   type ListRequestsQuery,
   type MarkPaidInput,
+  type RequestDetailResponse,
+  type RequestListResponse,
+  type RequestResponse,
   type RequestStatus,
 } from '@gex/shared';
 import { Prisma } from '@prisma/client';
-import { ClockService } from '../clock/clock.service';
-import { AppException } from '../common/http-exception.filter';
-import { dateInZone, offsetFor } from '../common/timezone';
+import type { AuthenticatedUser } from '../auth/authenticated-user';
+import { AppException } from '../common/errors/app.exception';
+import { dateInZone, offsetFor } from '../common/utils/timezone';
+import { toSafeNumber } from '../common/utils/to-safe-number';
 import { DashboardService } from '../dashboard/dashboard.service';
+import { ClockService } from '../infra/clock/clock.service';
 import { IdempotencyService } from './idempotency.service';
-import {
-  RequestsRepository,
-  Viewer,
-  toCategoryLabel,
-} from './requests.repository';
+import { fromPrismaCategory } from './request-category.mapper';
+import { RequestsRepository } from './requests.repository';
 
 type RequestWithRequester = Prisma.RequestGetPayload<{
   include: { requester: { select: { id: true; name: true } } };
@@ -63,7 +65,10 @@ export class RequestsService {
     private readonly dashboard: DashboardService,
   ) {}
 
-  async list(query: ListRequestsQuery, viewer: Viewer) {
+  async list(
+    query: ListRequestsQuery,
+    viewer: AuthenticatedUser,
+  ): Promise<RequestListResponse> {
     const { data, total } = await this.repository.list(query, viewer);
     const today = this.clock.today();
 
@@ -78,9 +83,9 @@ export class RequestsService {
 
   async create(
     input: CreateRequestInput,
-    requester: Viewer,
+    requester: AuthenticatedUser,
     idempotencyKey?: string,
-  ) {
+  ): Promise<RequestResponse> {
     const fingerprint = idempotencyKey
       ? this.idempotency.fingerprint(input)
       : undefined;
@@ -124,7 +129,10 @@ export class RequestsService {
     return response;
   }
 
-  async findOne(id: string, viewer: Viewer) {
+  async findOne(
+    id: string,
+    viewer: AuthenticatedUser,
+  ): Promise<RequestDetailResponse> {
     const found = await this.repository.findOne(id, viewer);
     // 404 e não 403: 403 confirmaria a existência do registro a quem não pode vê-lo.
     if (!found) {
@@ -145,7 +153,11 @@ export class RequestsService {
     };
   }
 
-  async decide(id: string, input: DecisionInput, actor: Viewer) {
+  async decide(
+    id: string,
+    input: DecisionInput,
+    actor: AuthenticatedUser,
+  ): Promise<RequestResponse> {
     const next = nextStatusFor(input.decision);
 
     const updated = await this.repository.transition(
@@ -170,7 +182,11 @@ export class RequestsService {
     return this.toResponse(updated, this.clock.today());
   }
 
-  async markPaid(id: string, input: MarkPaidInput, actor: Viewer) {
+  async markPaid(
+    id: string,
+    input: MarkPaidInput,
+    actor: AuthenticatedUser,
+  ): Promise<RequestResponse> {
     const zone = this.clock.timezone();
 
     // AAAA-MM-DD compara como string; hoje e a criação são datas civis no
@@ -222,7 +238,10 @@ export class RequestsService {
     }
   }
 
-  private toResponse(row: RequestWithRequester, today: string) {
+  private toResponse(
+    row: RequestWithRequester,
+    today: string,
+  ): RequestResponse {
     const dueDate = row.dueDate.toISOString().slice(0, 10);
 
     return {
@@ -230,10 +249,10 @@ export class RequestsService {
       supplier_name: row.supplierName,
       supplier_cnpj: row.supplierCnpj,
       invoice_number: row.invoiceNumber,
-      amount_cents: row.amountCents,
+      amount_cents: toSafeNumber(row.amountCents),
       competence: row.competence,
       due_date: dueDate,
-      category: toCategoryLabel(row.category),
+      category: fromPrismaCategory(row.category),
       description: row.description,
       status: row.status,
       rejection_reason: row.rejectionReason,

@@ -3,8 +3,8 @@
 // pausado via `docker pause` (SIGSTOP: soquete fica aberto, mas nada
 // nunca responde, sem RST e sem timeout de rede) ou um coletor OTLP fora
 // do ar. Nenhuma promessa de fora do processo deve conseguir prendê-lo
-// para sempre; ver health.controller.ts (probe) e main.ts (desligamento
-// da telemetria) para os dois usos reais.
+// para sempre; usado pelo probe de health, pela conexão inicial do
+// RedisService e pelo desligamento da telemetria em main.ts.
 export function withTimeout<T>(
   promise: Promise<T>,
   ms: number,

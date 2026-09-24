@@ -1,19 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { PrismaService } from '../prisma/prisma.service';
-import { resolveJwtSecret } from './jwt-secrets';
+import type { UserRole } from '@gex/shared';
+import { PrismaService } from '../../infra/prisma/prisma.service';
+import type { AuthenticatedUser } from '../authenticated-user';
+import { resolveJwtSecret } from '../jwt-secrets';
 
 interface JwtPayload {
   sub: string;
-  role: string;
-}
-
-export interface AuthenticatedUser {
-  id: string;
-  role: string;
-  name: string;
-  email: string;
+  role: UserRole;
 }
 
 @Injectable()

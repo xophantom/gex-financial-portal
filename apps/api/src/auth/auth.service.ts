@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import argon2 from 'argon2';
-import { PrismaService } from '../prisma/prisma.service';
-import { RedisService } from '../redis/redis.service';
-import { AppException } from '../common/http-exception.filter';
+import type { AuthResponse, SessionUser } from '@gex/shared';
+import { AppException } from '../common/errors/app.exception';
+import { PrismaService } from '../infra/prisma/prisma.service';
+import { RedisService } from '../infra/redis/redis.service';
 import { resolveJwtRefreshSecret } from './jwt-secrets';
 
 const MAX_ATTEMPTS_PER_EMAIL = 10;
@@ -32,7 +33,11 @@ export class AuthService {
   ) {}
 
   // O e-mail chega normalizado (minúsculas) pelo loginSchema.
-  async login(email: string, password: string, ip: string) {
+  async login(
+    email: string,
+    password: string,
+    ip: string,
+  ): Promise<AuthResponse> {
     const emailKey = `login:email:${email}`;
     await this.enforceLimit(
       emailKey,
@@ -75,7 +80,7 @@ export class AuthService {
     return this.issue(user);
   }
 
-  async refresh(refreshToken: string) {
+  async refresh(refreshToken: string): Promise<AuthResponse> {
     const payload = await this.jwt
       .verifyAsync<{ sub: string }>(refreshToken, {
         secret: this.refreshSecret,
@@ -113,12 +118,9 @@ export class AuthService {
     }
   }
 
-  private async issue(user: {
-    id: string;
-    name: string;
-    email: string;
-    role: string;
-  }) {
+  // Recebe a linha inteira do Prisma, mas só os campos de SessionUser saem
+  // na resposta: o passwordHash nunca chega ao cliente.
+  private async issue(user: SessionUser): Promise<AuthResponse> {
     const claims = { sub: user.id, role: user.role };
 
     return {

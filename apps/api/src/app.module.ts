@@ -1,13 +1,13 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { LoggerModule } from 'nestjs-pino';
 import { AuthModule } from './auth/auth.module';
-import { ClockModule } from './clock/clock.module';
-import { CorrelationMiddleware } from './common/correlation.middleware';
-import { buildLogger } from './common/logger';
+import { CorrelationMiddleware } from './common/http/correlation.middleware';
+import { buildLogger } from './common/logging/logger';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { HealthModule } from './health/health.module';
-import { PrismaModule } from './prisma/prisma.module';
-import { RedisModule } from './redis/redis.module';
+import { ClockModule } from './infra/clock/clock.module';
+import { PrismaModule } from './infra/prisma/prisma.module';
+import { RedisModule } from './infra/redis/redis.module';
 import { RequestsModule } from './requests/requests.module';
 
 @Module({

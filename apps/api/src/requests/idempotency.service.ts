@@ -1,13 +1,13 @@
 import { createHash } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
-import { convert } from '../common/bigint.interceptor';
-import { RedisService } from '../redis/redis.service';
+import type { RequestResponse } from '@gex/shared';
+import { RedisService } from '../infra/redis/redis.service';
 
 const TTL_SECONDS = 86_400;
 
 interface StoredIdempotencyRecord {
   fingerprint: string;
-  response: unknown;
+  response: RequestResponse;
 }
 
 @Injectable()
@@ -32,7 +32,7 @@ export class IdempotencyService {
     requesterId: string,
     key: string,
     fingerprint: string,
-  ): Promise<unknown> {
+  ): Promise<RequestResponse | null> {
     const stored = await this.redis.get(this.key(requesterId, key));
     if (!stored) return null;
 
@@ -46,13 +46,14 @@ export class IdempotencyService {
     requesterId: string,
     key: string,
     fingerprint: string,
-    payload: unknown,
+    response: RequestResponse,
   ): Promise<void> {
-    // amount_cents ainda é BigInt aqui, e JSON.stringify não o serializa.
-    const record: StoredIdempotencyRecord = { fingerprint, response: payload };
+    // A resposta já está no formato do contrato (amount_cents em number, datas
+    // em ISO), então o JSON gravado é o mesmo que o primeiro pedido recebeu.
+    const record: StoredIdempotencyRecord = { fingerprint, response };
     await this.redis.setNx(
       this.key(requesterId, key),
-      JSON.stringify(convert(record)),
+      JSON.stringify(record),
       TTL_SECONDS,
     );
   }

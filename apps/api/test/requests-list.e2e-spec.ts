@@ -1,44 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { ErrorEnvelope, RequestListResponse } from '@gex/shared';
 import { PrismaClient } from '@prisma/client';
 import request from 'supertest';
-import { createTestApp, TestApp } from './helpers';
+import { createTestApp, TestApp } from './support/test-app';
 
 let app: TestApp;
 let finance: string;
 let requesterAna: string;
-
-interface RequesterInfo {
-  id: string;
-  name: string;
-}
-
-interface RequestListItem {
-  id: string;
-  invoice_number: string;
-  status: string;
-  supplier_name: string;
-  due_date: string;
-  amount_cents: number;
-  is_overdue: boolean;
-  requester: RequesterInfo;
-}
-
-interface RequestListBody {
-  data: RequestListItem[];
-  page: number;
-  page_size: number;
-  total: number;
-  total_pages: number;
-}
-
-interface ErrorBody {
-  error: {
-    code: string;
-    message: string;
-    details?: { field: string; message: string }[];
-  };
-}
 
 interface SeedRequestFixtureRow {
   invoice_number: string;
@@ -71,14 +40,14 @@ const list = (token: string, query = '') =>
 describe('GET /requests scoping', () => {
   it('shows all 16 requests to finance', async () => {
     const response = await list(finance).expect(200);
-    const body = response.body as RequestListBody;
+    const body = response.body as RequestListResponse;
 
     expect(body.total).toBe(16);
   });
 
   it('shows a requester only their own 8', async () => {
     const response = await list(requesterAna).expect(200);
-    const body = response.body as RequestListBody;
+    const body = response.body as RequestListResponse;
 
     expect(body.total).toBe(8);
     for (const row of body.data) {
@@ -88,14 +57,14 @@ describe('GET /requests scoping', () => {
 
   it('includes the requester name without an extra round trip', async () => {
     const response = await list(finance, '?page_size=1').expect(200);
-    const body = response.body as RequestListBody;
+    const body = response.body as RequestListResponse;
 
     expect(body.data[0].requester.name).toEqual(expect.any(String));
   });
 
   it('returns amount_cents as a JSON number, not a BigInt string', async () => {
     const response = await list(finance, '?page_size=1').expect(200);
-    const body = response.body as RequestListBody;
+    const body = response.body as RequestListResponse;
 
     expect(typeof body.data[0].amount_cents).toBe('number');
   });
@@ -104,7 +73,7 @@ describe('GET /requests scoping', () => {
 describe('GET /requests pagination', () => {
   it('paginates and reports the totals', async () => {
     const response = await list(finance, '?page=2&page_size=5').expect(200);
-    const body = response.body as RequestListBody;
+    const body = response.body as RequestListResponse;
 
     expect(body.data).toHaveLength(5);
     expect(body).toMatchObject({
@@ -123,7 +92,7 @@ describe('GET /requests pagination', () => {
     '?page_size=-5',
   ])('rejects %s with 422 instead of a database error', async (query) => {
     const response = await list(finance, query).expect(422);
-    const body = response.body as ErrorBody;
+    const body = response.body as ErrorEnvelope;
 
     expect(body.error.code).toBe('VALIDATION_ERROR');
   });
@@ -136,7 +105,7 @@ describe('GET /requests pagination', () => {
 describe('GET /requests filters', () => {
   it('filters by status', async () => {
     const response = await list(finance, '?status=PENDING').expect(200);
-    const body = response.body as RequestListBody;
+    const body = response.body as RequestListResponse;
 
     expect(body.total).toBe(5);
     expect(body.data.every((row) => row.status === 'PENDING')).toBe(true);
@@ -148,7 +117,7 @@ describe('GET /requests filters', () => {
 
   it('searches suppliers case-insensitively and partially', async () => {
     const response = await list(finance, '?supplier=aurora').expect(200);
-    const body = response.body as RequestListBody;
+    const body = response.body as RequestListResponse;
 
     expect(body.total).toBeGreaterThan(0);
     expect(body.data[0].supplier_name).toContain('Aurora');
@@ -156,14 +125,14 @@ describe('GET /requests filters', () => {
 
   it('treats LIKE wildcards in the search as literal text', async () => {
     const response = await list(finance, '?supplier=%25').expect(200);
-    const body = response.body as RequestListBody;
+    const body = response.body as RequestListResponse;
 
     expect(body.total).toBe(0);
   });
 
   it('treats an underscore in the search as literal text', async () => {
     const response = await list(finance, '?supplier=_').expect(200);
-    const body = response.body as RequestListBody;
+    const body = response.body as RequestListResponse;
 
     expect(body.total).toBe(0);
   });
@@ -173,7 +142,7 @@ describe('GET /requests filters', () => {
       finance,
       '?due_from=2026-09-10&due_to=2026-09-10',
     ).expect(200);
-    const body = response.body as RequestListBody;
+    const body = response.body as RequestListResponse;
 
     expect(body.total).toBe(1);
     expect(body.data[0].due_date).toBe('2026-09-10');
@@ -184,14 +153,14 @@ describe('GET /requests filters', () => {
       finance,
       '?due_from=2026-09-30&due_to=2026-09-01',
     ).expect(422);
-    const body = response.body as ErrorBody;
+    const body = response.body as ErrorEnvelope;
 
     expect(body.error.details?.[0].message).toMatch(/posterior/i);
   });
 
   it('marks exactly the overdue rows against APP_TODAY, not the wall clock', async () => {
     const response = await list(finance, '?page_size=100').expect(200);
-    const body = response.body as RequestListBody;
+    const body = response.body as RequestListResponse;
 
     // Deriva o conjunto esperado do fixture cru, reaplicando a regra do
     // domínio (não chamando o código sob teste): um total de 4 aqui não
@@ -221,7 +190,7 @@ describe('GET /requests filters', () => {
       finance,
       '?due_from=2026-09-18&due_to=2026-09-18',
     ).expect(200);
-    const body = response.body as RequestListBody;
+    const body = response.body as RequestListResponse;
 
     expect(body.data.every((row) => !row.is_overdue)).toBe(true);
   });
@@ -303,7 +272,7 @@ describe('GET /requests pagination has a total order', () => {
         finance,
         `?supplier=${encodeURIComponent(COLLISION_SUPPLIER)}&page=${page}&page_size=${PAGE_SIZE}`,
       ).expect(200);
-      const body = response.body as RequestListBody;
+      const body = response.body as RequestListResponse;
 
       seenIds.push(...body.data.map((row) => row.id));
       await touchAllCollisionRows();

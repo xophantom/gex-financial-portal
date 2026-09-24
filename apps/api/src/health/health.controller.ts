@@ -1,9 +1,9 @@
 import { Controller, Get, Res } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
-import { Public } from '../auth/public.decorator';
-import { withTimeout } from '../common/with-timeout';
-import { RedisService } from '../redis/redis.service';
+import { Public } from '../auth/decorators/public.decorator';
+import { withTimeout } from '../common/utils/with-timeout';
+import { RedisService } from '../infra/redis/redis.service';
 import { HealthDatabaseClient } from './health-database.client';
 
 // Uma dependência congelada (ex.: `docker pause`) mantém o socket aberto sem

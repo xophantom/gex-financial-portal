@@ -1,5 +1,5 @@
-import { setupTelemetry } from './telemetry';
-import { withTimeout } from './common/with-timeout';
+import { setupTelemetry } from './infra/telemetry';
+import { withTimeout } from './common/utils/with-timeout';
 
 // Precisa ser a primeira coisa executada, antes de qualquer import do Nest:
 // apps/api compila para CommonJS, então cada `import` vira um `require()`

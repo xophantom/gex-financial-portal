@@ -1,20 +1,7 @@
 import { JwtService } from '@nestjs/jwt';
+import type { AuthResponse, ErrorEnvelope } from '@gex/shared';
 import request from 'supertest';
-import { createTestApp, TestApp } from './helpers';
-
-interface LoginBody {
-  user: { role: string };
-  access_token: string;
-}
-
-interface ErrorBody {
-  error: { code: string; message: string };
-}
-
-interface TokenPairBody {
-  access_token: string;
-  refresh_token: string;
-}
+import { createTestApp, TestApp } from './support/test-app';
 
 let app: TestApp;
 
@@ -31,7 +18,7 @@ describe('POST /auth/login', () => {
       .send({ email: 'solicitante@gex.test', password: 'GexRequester123!' })
       .expect(200);
 
-    const body = response.body as LoginBody;
+    const body = response.body as AuthResponse;
     expect(body.user.role).toBe('REQUESTER');
     expect(body.access_token).toEqual(expect.any(String));
   });
@@ -42,7 +29,7 @@ describe('POST /auth/login', () => {
       .send({ email: 'solicitante@gex.test', password: 'wrong' })
       .expect(401);
 
-    const body = response.body as ErrorBody;
+    const body = response.body as ErrorEnvelope;
     expect(body.error.code).toBe('UNAUTHENTICATED');
     expect(body.error.message).toBe('E-mail ou senha inválidos');
   });
@@ -69,7 +56,7 @@ describe('POST /auth/login', () => {
       .send('{"email": "solicitante@gex.test",')
       .expect(422);
 
-    const body = response.body as ErrorBody;
+    const body = response.body as ErrorEnvelope;
     expect(body.error).toEqual({
       code: 'VALIDATION_ERROR',
       message: 'Dados inválidos',
@@ -89,14 +76,14 @@ describe('POST /auth/refresh', () => {
     const login = await request(app.server)
       .post('/auth/login')
       .send({ email: 'financeiro@gex.test', password: 'GexFinance123!' });
-    const { refresh_token: refreshToken } = login.body as TokenPairBody;
+    const { refresh_token: refreshToken } = login.body as AuthResponse;
 
     const response = await request(app.server)
       .post('/auth/refresh')
       .send({ refresh_token: refreshToken })
       .expect(200);
 
-    const body = response.body as TokenPairBody;
+    const body = response.body as AuthResponse;
     expect(body.access_token).toEqual(expect.any(String));
     expect(body.refresh_token).toEqual(expect.any(String));
   });
@@ -109,7 +96,7 @@ describe('POST /auth/refresh', () => {
         .send(payload)
         .expect(422);
 
-      const body = response.body as ErrorBody;
+      const body = response.body as ErrorEnvelope;
       expect(body.error.code).toBe('VALIDATION_ERROR');
     },
   );
@@ -175,14 +162,15 @@ describe('authenticated access to a running route', () => {
 });
 
 // Com `secret: undefined`, o @nestjs/jwt usaria JWT_SECRET para os dois
-// tokens; helpers.ts usa segredos distintos para provar a separação.
+// tokens; test/support/test-app.ts usa segredos distintos para provar a
+// separação.
 describe('access and refresh tokens use distinct secrets', () => {
   it('rejects a refresh token used as an access token', async () => {
     const login = await request(app.server)
       .post('/auth/login')
       .send({ email: 'financeiro@gex.test', password: 'GexFinance123!' });
 
-    const { refresh_token: refreshToken } = login.body as TokenPairBody;
+    const { refresh_token: refreshToken } = login.body as AuthResponse;
 
     await request(app.server)
       .get('/requests')
@@ -195,14 +183,14 @@ describe('access and refresh tokens use distinct secrets', () => {
       .post('/auth/login')
       .send({ email: 'financeiro@gex.test', password: 'GexFinance123!' });
 
-    const { access_token: accessToken } = login.body as TokenPairBody;
+    const { access_token: accessToken } = login.body as AuthResponse;
 
     const response = await request(app.server)
       .post('/auth/refresh')
       .send({ refresh_token: accessToken })
       .expect(401);
 
-    const body = response.body as ErrorBody;
+    const body = response.body as ErrorEnvelope;
     expect(body.error.code).toBe('UNAUTHENTICATED');
   });
 });

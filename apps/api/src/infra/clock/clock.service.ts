@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { isCalendarDate } from '@gex/shared';
-import { dateInZone } from '../common/timezone';
+import { dateInZone } from '../../common/utils/timezone';
 
 const CALENDAR_DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 

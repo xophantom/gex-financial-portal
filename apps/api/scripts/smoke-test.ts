@@ -84,9 +84,9 @@ async function waitForCorrelatedLine(
 async function main(): Promise<void> {
   runBuild();
 
-  console.log(`[smoke] booting node dist/src/main on port ${PORT}`);
+  console.log(`[smoke] booting node dist/main on port ${PORT}`);
   const lines: string[] = [];
-  const child = spawn('node', ['dist/src/main'], {
+  const child = spawn('node', ['dist/main'], {
     env: {
       ...process.env,
       DATABASE_URL,

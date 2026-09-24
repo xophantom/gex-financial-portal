@@ -1,43 +1,54 @@
-import { existsSync, readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { PrismaClient, RequestCategory } from '@prisma/client'
-import argon2 from 'argon2'
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { PrismaClient, RequestStatus, UserRole } from '@prisma/client';
+import argon2 from 'argon2';
+import { toPrismaCategory } from '../src/requests/request-category.mapper';
 
-// __dirname muda entre dev (prisma/) e build (dist/prisma/), então sobe a
-// árvore até achar data/ em vez de fixar a quantidade de "../".
-function findDataDir(start: string): string {
-  let dir = start
-  for (let i = 0; i < 8; i += 1) {
-    const candidate = join(dir, 'data')
-    if (existsSync(candidate)) return candidate
-    const parent = dirname(dir)
-    if (parent === dir) break
-    dir = parent
-  }
-  throw new Error(`could not locate the data/ directory upward from ${start}`)
+// Roda sempre a partir do fonte (tsx em dev e no container, ts-jest nos
+// testes), nunca compilado: o caminho até data/ na raiz do monorepo é fixo.
+const DATA = join(__dirname, '..', '..', '..', 'data');
+
+// Formato dos arquivos em data/, como vêm do enunciado (snake_case, datas em
+// string, categoria com acento).
+export interface SeedUser {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  seed_password: string;
 }
 
-const DATA = findDataDir(__dirname)
+export interface SeedRequest {
+  id: string;
+  requester_id: string;
+  supplier_name: string;
+  supplier_cnpj: string;
+  invoice_number: string;
+  amount_cents: number;
+  competence: string;
+  due_date: string;
+  category: string;
+  description: string | null;
+  status: RequestStatus;
+  rejection_reason: string | null;
+  paid_at: string | null;
+  payment_reference: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SeedAuditEvent {
+  id: string;
+  request_id: string;
+  actor_id: string;
+  previous_status: RequestStatus | null;
+  new_status: RequestStatus;
+  reason: string | null;
+  created_at: string;
+}
 
 const read = <T>(file: string): T[] =>
-  JSON.parse(readFileSync(join(DATA, file), 'utf8')) as T[]
-
-// O client do Prisma usa a chave do enum (SERVICOS), não o valor com acento
-// do @map que vem nos dados de origem.
-const CATEGORY_BY_LABEL = new Map<string, RequestCategory>([
-  ['SOFTWARE', 'SOFTWARE'],
-  ['SERVIÇOS', 'SERVICOS'],
-  ['MARKETING', 'MARKETING'],
-  ['INFRAESTRUTURA', 'INFRAESTRUTURA'],
-])
-
-export function toRequestCategory(label: string): RequestCategory {
-  const category = CATEGORY_BY_LABEL.get(label)
-  if (!category) {
-    throw new Error(`unknown request category: ${label}`)
-  }
-  return category
-}
+  JSON.parse(readFileSync(join(DATA, file), 'utf8')) as T[];
 
 // Roda a cada boot do container, então só cria o que falta: sobrescrever
 // linhas existentes desfaria transições feitas pela aplicação e deixaria os
@@ -45,25 +56,27 @@ export function toRequestCategory(label: string): RequestCategory {
 export async function seed(prisma: PrismaClient): Promise<void> {
   const existingUsers = new Set(
     (await prisma.user.findMany({ select: { id: true } })).map(({ id }) => id),
-  )
+  );
 
-  for (const user of read<Record<string, string>>('seed_users.json')) {
+  for (const user of read<SeedUser>('seed_users.json')) {
     // argon2 é caro de propósito: só calcula para quem ainda não existe.
-    if (existingUsers.has(user.id)) continue
+    if (existingUsers.has(user.id)) continue;
 
     await prisma.user.create({
       data: {
         id: user.id,
         name: user.name,
         email: user.email,
-        role: user.role as 'REQUESTER' | 'FINANCE',
-        passwordHash: await argon2.hash(user.seed_password, { type: argon2.argon2id }),
+        role: user.role,
+        passwordHash: await argon2.hash(user.seed_password, {
+          type: argon2.argon2id,
+        }),
       },
-    })
+    });
   }
 
   await prisma.request.createMany({
-    data: read<Record<string, never>>('seed_requests.json').map((row) => ({
+    data: read<SeedRequest>('seed_requests.json').map((row) => ({
       id: row.id,
       requesterId: row.requester_id,
       supplierName: row.supplier_name,
@@ -72,7 +85,7 @@ export async function seed(prisma: PrismaClient): Promise<void> {
       amountCents: BigInt(row.amount_cents),
       competence: row.competence,
       dueDate: new Date(`${row.due_date}T00:00:00Z`),
-      category: toRequestCategory(row.category),
+      category: toPrismaCategory(row.category),
       description: row.description,
       status: row.status,
       rejectionReason: row.rejection_reason,
@@ -82,10 +95,10 @@ export async function seed(prisma: PrismaClient): Promise<void> {
       updatedAt: new Date(row.updated_at),
     })),
     skipDuplicates: true,
-  })
+  });
 
   await prisma.requestStatusEvent.createMany({
-    data: read<Record<string, never>>('seed_audit_events.json').map((event) => ({
+    data: read<SeedAuditEvent>('seed_audit_events.json').map((event) => ({
       id: event.id,
       requestId: event.request_id,
       actorId: event.actor_id,
@@ -95,16 +108,16 @@ export async function seed(prisma: PrismaClient): Promise<void> {
       createdAt: new Date(event.created_at),
     })),
     skipDuplicates: true,
-  })
+  });
 }
 
 if (require.main === module) {
-  const prisma = new PrismaClient()
+  const prisma = new PrismaClient();
   seed(prisma)
     .then(() => prisma.$disconnect())
     .catch(async (error) => {
-      console.error(error)
-      await prisma.$disconnect()
-      process.exit(1)
-    })
+      console.error(error);
+      await prisma.$disconnect();
+      process.exit(1);
+    });
 }

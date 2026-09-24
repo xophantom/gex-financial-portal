@@ -5,7 +5,8 @@ import {
 } from '@nestjs/common';
 import type { ErrorEnvelope } from '@gex/shared';
 import { ZodError, z } from 'zod';
-import { AppException, HttpExceptionFilter } from './http-exception.filter';
+import { AppException } from './app.exception';
+import { HttpExceptionFilter } from './http-exception.filter';
 
 interface FakeResponse {
   status: (code: number) => FakeResponse;

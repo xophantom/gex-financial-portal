@@ -1,27 +1,18 @@
+import type { AuthenticatedUser } from '../auth/authenticated-user';
+import type { DashboardSummaryRow } from './dashboard.repository';
 import { DashboardService } from './dashboard.service';
-import type { Viewer } from '../requests/requests.repository';
 
-const viewer: Viewer = {
+const viewer: AuthenticatedUser = {
   id: '10000000-0000-4000-8000-000000000001',
+  name: 'Ana',
+  email: 'solicitante@gex.test',
   role: 'REQUESTER',
 };
-
-interface FakeRow {
-  pending_amount_cents: bigint;
-  approved_amount_cents: bigint;
-  paid_this_month_amount_cents: bigint;
-  overdue_count: bigint;
-  request_count: bigint;
-  pending_count: bigint;
-  approved_count: bigint;
-  rejected_count: bigint;
-  paid_count: bigint;
-}
 
 /* eslint-disable @typescript-eslint/require-await -- fakes precisam devolver
    Promise para bater com a assinatura real dos métodos assíncronos que
    substituem. */
-function build(row: FakeRow, redisUp = true) {
+function build(row: DashboardSummaryRow, redisUp = true) {
   const repository = { summary: jest.fn(async () => row) };
   const clock = {
     today: jest.fn(() => '2026-09-18'),
@@ -57,7 +48,7 @@ function build(row: FakeRow, redisUp = true) {
 }
 /* eslint-enable @typescript-eslint/require-await */
 
-const baseRow: FakeRow = {
+const baseRow: DashboardSummaryRow = {
   pending_amount_cents: 0n,
   approved_amount_cents: 0n,
   paid_this_month_amount_cents: 0n,
@@ -80,24 +71,29 @@ describe('DashboardService — overflow safety', () => {
     await expect(service.summary(viewer)).rejects.toThrow(/safe integer range/);
   });
 
-  // Só o BigIntInterceptor, na borda HTTP, converte o valor fresco.
-  it('keeps the fresh value as BigInt for the HTTP interceptor to convert', async () => {
+  it('returns amounts and counts as JSON numbers, as the contract declares', async () => {
     const { service } = build({ ...baseRow, pending_amount_cents: 875_049n });
 
     const result = await service.summary(viewer);
-    expect(result.pending_amount_cents).toBe(875_049n);
-    expect(typeof result.pending_amount_cents).toBe('bigint');
+    expect(result.pending_amount_cents).toBe(875_049);
+    expect(result.request_count).toBe(1);
+    expect(result.status_counts.PENDING).toBe(1);
   });
 });
 
 describe('DashboardService — cache', () => {
   it('serves the second read from the cache', async () => {
-    const { service, repository } = build(baseRow);
+    const { service, repository } = build({
+      ...baseRow,
+      pending_amount_cents: 875_049n,
+    });
 
-    await service.summary(viewer);
-    await service.summary(viewer);
+    const fresh = await service.summary(viewer);
+    const cached = await service.summary(viewer);
 
     expect(repository.summary).toHaveBeenCalledTimes(1);
+    // O JSON gravado no Redis volta com o mesmo formato da resposta fresca.
+    expect(cached).toEqual(fresh);
   });
 
   it('queries again after invalidate()', async () => {
@@ -120,7 +116,7 @@ describe('DashboardService — cache', () => {
     await service.summary(viewer);
     await expect(service.invalidate()).resolves.toBeUndefined();
 
-    expect(first.pending_amount_cents).toBe(42n);
+    expect(first.pending_amount_cents).toBe(42);
     expect(repository.summary).toHaveBeenCalledTimes(2);
     expect(redis.get).not.toHaveBeenCalled();
   });

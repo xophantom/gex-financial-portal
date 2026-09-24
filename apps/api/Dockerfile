@@ -39,6 +39,7 @@ WORKDIR /app/apps/api
 EXPOSE 3001
 
 # Migrations pendentes + seed (só cria o que falta, então pode rodar a cada
-# subida sem desfazer mudanças). O seed entra na compilação do Nest, por
-# isso os caminhos dist/prisma e dist/src.
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/prisma/seed.js && node dist/src/main"]
+# subida sem desfazer mudanças) + API. O seed fica fora do build do Nest e
+# roda do fonte com tsx, que já está no node_modules copiado acima; o npx só
+# resolve os binários locais, sem baixar nada.
+CMD ["sh", "-c", "npx prisma migrate deploy && npx tsx prisma/seed.ts && node dist/main"]

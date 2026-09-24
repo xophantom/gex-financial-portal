@@ -1,6 +1,6 @@
 import argon2 from 'argon2';
 import { AuthService } from './auth.service';
-import { AppException } from '../common/http-exception.filter';
+import { AppException } from '../common/errors/app.exception';
 
 const IP = '203.0.113.10';
 // Espelha a constante privada de auth.service.ts só para o teste de limite

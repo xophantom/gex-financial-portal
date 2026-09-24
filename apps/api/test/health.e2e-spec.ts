@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { createTestApp, TestApp } from './helpers';
+import { createTestApp, TestApp } from './support/test-app';
 
 interface HealthBody {
   status: string;

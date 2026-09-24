@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import type { ErrorCode, ErrorDetail } from '@gex/shared';
 import type { Response } from 'express';
+import { AppException } from './app.exception';
 
 interface ZodLikeError extends Error {
   issues: { path: (string | number)[]; message: string }[];
@@ -21,17 +22,6 @@ function isZodLikeError(exception: unknown): exception is ZodLikeError {
     exception.name === 'ZodError' &&
     Array.isArray((exception as { issues?: unknown }).issues)
   );
-}
-
-export class AppException extends Error {
-  constructor(
-    readonly code: ErrorCode,
-    message: string,
-    readonly status: number,
-    readonly details?: ErrorDetail[],
-  ) {
-    super(message);
-  }
 }
 
 interface HttpErrorMapping {

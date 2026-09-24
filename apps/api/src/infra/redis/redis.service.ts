@@ -5,7 +5,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import Redis from 'ioredis';
-import { withTimeout } from '../common/with-timeout';
+import { withTimeout } from '../../common/utils/with-timeout';
 
 const CONNECT_TIMEOUT_MS = 1_000;
 const COMMAND_TIMEOUT_MS = 500;

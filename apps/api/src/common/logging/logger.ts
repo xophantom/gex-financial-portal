@@ -1,5 +1,5 @@
 import pino from 'pino';
-import { correlationStore } from './correlation.middleware';
+import { correlationStore } from '../http/correlation.middleware';
 
 export const redactionOptions = {
   paths: [

@@ -3,45 +3,13 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
 import argon2 from 'argon2';
-import { seed, toRequestCategory } from '../prisma/seed';
-import { startTestDatabase, stopTestDatabase } from './testcontainers';
-
-interface SeedUserRow {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  seed_password: string;
-}
-
-interface SeedRequestRow {
-  id: string;
-  requester_id: string;
-  supplier_name: string;
-  supplier_cnpj: string;
-  invoice_number: string;
-  amount_cents: number;
-  competence: string;
-  due_date: string;
-  category: string;
-  description: string;
-  status: string;
-  rejection_reason: string | null;
-  paid_at: string | null;
-  payment_reference: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-interface SeedAuditEventRow {
-  id: string;
-  request_id: string;
-  actor_id: string;
-  previous_status: string | null;
-  new_status: string;
-  reason: string | null;
-  created_at: string;
-}
+import {
+  seed,
+  type SeedAuditEvent,
+  type SeedRequest,
+  type SeedUser,
+} from '../prisma/seed';
+import { startTestDatabase, stopTestDatabase } from './support/containers';
 
 const DATA = join(__dirname, '../../../data');
 
@@ -70,19 +38,20 @@ afterAll(async () => {
 describe('seed', () => {
   it('loads every user, request and audit event', async () => {
     expect(await prisma.user.count()).toBe(
-      read<SeedUserRow>('seed_users.json').length,
+      read<SeedUser>('seed_users.json').length,
     );
     expect(await prisma.request.count()).toBe(
-      read<SeedRequestRow>('seed_requests.json').length,
+      read<SeedRequest>('seed_requests.json').length,
     );
     expect(await prisma.requestStatusEvent.count()).toBe(
-      read<SeedAuditEventRow>('seed_audit_events.json').length,
+      read<SeedAuditEvent>('seed_audit_events.json').length,
     );
   });
 
   it('stores every request field exactly as provided', async () => {
-    // Coluna crua, não toRequestCategory(): comparar com a própria função
-    // sob teste não pegaria um mapeamento trocado.
+    // Coluna crua, não fromPrismaCategory(): comparar com o próprio
+    // mapeamento que o seed usa não pegaria uma troca de categorias. O
+    // mapper tem teste unitário próprio (request-category.mapper.spec.ts).
     const rawCategories = await prisma.$queryRaw<
       Array<{ id: string; category: string }>
     >`
@@ -92,7 +61,7 @@ describe('seed', () => {
       rawCategories.map((row) => [row.id, row.category]),
     );
 
-    for (const row of read<SeedRequestRow>('seed_requests.json')) {
+    for (const row of read<SeedRequest>('seed_requests.json')) {
       const stored = await prisma.request.findUniqueOrThrow({
         where: { id: row.id },
       });
@@ -120,7 +89,7 @@ describe('seed', () => {
   });
 
   it('stores every audit event field exactly as provided', async () => {
-    for (const event of read<SeedAuditEventRow>('seed_audit_events.json')) {
+    for (const event of read<SeedAuditEvent>('seed_audit_events.json')) {
       const stored = await prisma.requestStatusEvent.findUniqueOrThrow({
         where: { id: event.id },
       });
@@ -137,8 +106,8 @@ describe('seed', () => {
   });
 
   it('ends every audit chain at the request current status', () => {
-    const events = read<SeedAuditEventRow>('seed_audit_events.json');
-    const requests = read<SeedRequestRow>('seed_requests.json');
+    const events = read<SeedAuditEvent>('seed_audit_events.json');
+    const requests = read<SeedRequest>('seed_requests.json');
 
     for (const request of requests) {
       const chain = events
@@ -153,14 +122,8 @@ describe('seed', () => {
     }
   });
 
-  it('throws when given an unknown category label', () => {
-    expect(() => toRequestCategory('UNKNOWN')).toThrow(
-      /unknown request category: UNKNOWN/,
-    );
-  });
-
   it('hashes seed passwords instead of storing them', async () => {
-    for (const user of read<SeedUserRow>('seed_users.json')) {
+    for (const user of read<SeedUser>('seed_users.json')) {
       const stored = await prisma.user.findUniqueOrThrow({
         where: { id: user.id },
       });
@@ -178,10 +141,10 @@ describe('seed', () => {
     await seed(prisma);
 
     expect(await prisma.request.count()).toBe(
-      read<SeedRequestRow>('seed_requests.json').length,
+      read<SeedRequest>('seed_requests.json').length,
     );
     expect(await prisma.requestStatusEvent.count()).toBe(
-      read<SeedAuditEventRow>('seed_audit_events.json').length,
+      read<SeedAuditEvent>('seed_audit_events.json').length,
     );
   });
 

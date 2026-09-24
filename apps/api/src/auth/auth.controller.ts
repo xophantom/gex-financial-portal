@@ -8,10 +8,11 @@ import {
 } from '@nestjs/common';
 import { loginSchema, refreshSchema } from '@gex/shared';
 import type { Request } from 'express';
-import { ZodValidationPipe } from '../common/zod-validation.pipe';
+import { ZodValidationPipe } from '../common/http/zod-validation.pipe';
 import { AuthService } from './auth.service';
-import { LoginDto, RefreshDto } from './dto';
-import { Public } from './public.decorator';
+import { Public } from './decorators/public.decorator';
+import { LoginDto } from './dto/login.dto';
+import { RefreshDto } from './dto/refresh.dto';
 
 // 200 e não o 201 padrão de POST: login e refresh não criam recurso.
 @Controller('auth')

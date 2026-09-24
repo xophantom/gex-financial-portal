@@ -3,10 +3,10 @@ import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { PrismaClient } from '@prisma/client';
 import request from 'supertest';
-import { AppModule } from '../src/app.module';
-import { configureApp } from '../src/configure-app';
-import { withTimeout } from '../src/common/with-timeout';
-import { seed } from '../prisma/seed';
+import { seed } from '../../prisma/seed';
+import { AppModule } from '../../src/app.module';
+import { withTimeout } from '../../src/common/utils/with-timeout';
+import { configureApp } from '../../src/configure-app';
 import {
   pauseTestDatabase,
   pauseTestRedis,
@@ -16,7 +16,7 @@ import {
   stopTestRedis,
   unpauseTestDatabase,
   unpauseTestRedis,
-} from './testcontainers';
+} from './containers';
 
 export interface TestApp {
   server: Server;

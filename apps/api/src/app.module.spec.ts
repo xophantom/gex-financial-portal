@@ -1,7 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { AppModule } from './app.module';
-import { ClockService } from './clock/clock.service';
-import { PrismaService } from './prisma/prisma.service';
+import { ClockService } from './infra/clock/clock.service';
+import { PrismaService } from './infra/prisma/prisma.service';
 
 describe('AppModule', () => {
   // AuthModule exige os segredos JWT e o HealthDatabaseClient exige

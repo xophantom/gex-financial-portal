@@ -1,8 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { cleanupOpenApiDoc } from 'nestjs-zod';
-import { BigIntInterceptor } from './common/bigint.interceptor';
-import { HttpExceptionFilter } from './common/http-exception.filter';
+import { HttpExceptionFilter } from './common/errors/http-exception.filter';
 
 // Usado por main.ts e pelos testes e2e, para que o app testado seja o mesmo
 // que roda em produção.
@@ -16,7 +15,6 @@ import { HttpExceptionFilter } from './common/http-exception.filter';
 // schemas Zod usados para validar a entrada — não existe uma segunda
 // definição da API para ficar desatualizada.
 export function configureApp(app: INestApplication): void {
-  app.useGlobalInterceptors(new BigIntInterceptor());
   app.useGlobalFilters(new HttpExceptionFilter());
 
   const document = SwaggerModule.createDocument(

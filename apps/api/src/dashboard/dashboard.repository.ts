@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
-import type { Viewer } from '../requests/requests.repository';
+import type { AuthenticatedUser } from '../auth/authenticated-user';
+import { PrismaService } from '../infra/prisma/prisma.service';
 
 // SUM(bigint) vira NUMERIC no Postgres, que o driver do Prisma devolve como
 // Prisma.Decimal; COUNT(*) devolve bigint.
@@ -17,7 +17,7 @@ interface RawRow {
   paid_count: bigint;
 }
 
-interface Row {
+export interface DashboardSummaryRow {
   pending_amount_cents: bigint;
   approved_amount_cents: bigint;
   paid_this_month_amount_cents: bigint;
@@ -45,11 +45,11 @@ export class DashboardRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async summary(
-    viewer: Viewer,
+    viewer: AuthenticatedUser,
     today: string,
     month: string,
     zone: string,
-  ): Promise<Row> {
+  ): Promise<DashboardSummaryRow> {
     const scope =
       viewer.role === 'FINANCE'
         ? Prisma.sql`TRUE`
