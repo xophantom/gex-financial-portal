@@ -59,7 +59,8 @@ ao estado do seed: `docker compose down -v && docker compose up --build`.
 
 ## Como testar
 
-Com Node 22 e pnpm (`corepack enable`):
+Com Node 22.12+ (a API carrega o `@gex/shared`, que é ESM, via `require`) e
+pnpm (`corepack enable`):
 
 ```bash
 pnpm install && pnpm bootstrap     # dependências, build do @gex/shared e client do Prisma
