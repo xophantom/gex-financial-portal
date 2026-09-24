@@ -69,6 +69,13 @@ vez de deixar duas requisições concorrentes criarem ou aprovarem em duplicado.
   aprovações quase simultâneas) é curta e rara; travar a linha durante a
   transição é mais simples de raciocinar do que retry com `version` e
   reconciliar o que fazer quando ele falha.
+- **Sem TanStack Query.** Foi instalado no início e removido ao construir: com
+  Server Components buscando `cache: 'no-store'`, não sobra cache de cliente
+  para ele gerenciar, e depois de uma mutação `router.refresh()` invalida na
+  fonte. Zustand ficou (fila de toasts e estado do modal de decisão, que é
+  compartilhado entre lista e detalhe) e nuqs também (filtros e paginação na
+  URL, o que torna a busca compartilhável e faz o botão voltar funcionar).
+  Biblioteca que não resolve um problema presente é peso, não arquitetura.
 - **Redis nunca é fonte de verdade.** Cacheia o resumo do dashboard e guarda
   chaves de idempotência; some do ar e a API cai para `degraded`, nunca para
   dado incorreto — a garantia de unicidade (CNPJ + nota) mora no índice único
