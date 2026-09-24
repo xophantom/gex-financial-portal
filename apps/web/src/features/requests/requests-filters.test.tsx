@@ -90,4 +90,30 @@ describe('RequestsFilters', () => {
     await waitFor(() => expect(onUrlUpdate).toHaveBeenCalled())
     expect(lastUpdate().searchParams.get('page') ?? '1').toBe('1')
   })
+
+  it('hides the clear action while no filter is active', () => {
+    renderFilters('?page=2')
+
+    expect(screen.queryByRole('button', { name: /limpar filtros/i })).not.toBeInTheDocument()
+  })
+
+  it('clears every filter and the page in a single server navigation', async () => {
+    const { onUrlUpdate, lastUpdate } = renderFilters(
+      '?status=PENDING&supplier=Aurora&due_from=2026-09-01&due_to=2026-09-30&page=3',
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: /limpar filtros/i }))
+
+    await waitFor(() => expect(onUrlUpdate).toHaveBeenCalledTimes(1))
+    expect(lastUpdate().queryString).toBe('')
+    expect(lastUpdate().options.shallow).toBe(false)
+  })
+
+  it('groups the due-date bounds under a single label', () => {
+    renderFilters()
+
+    const group = screen.getByRole('group', { name: 'Vencimento' })
+    expect(group).toContainElement(screen.getByLabelText(/vencimento de/i))
+    expect(group).toContainElement(screen.getByLabelText(/vencimento até/i))
+  })
 })

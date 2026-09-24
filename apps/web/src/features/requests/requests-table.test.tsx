@@ -28,9 +28,39 @@ describe('RequestsTable', () => {
     expect(screen.queryByText(/vencida/i)).not.toBeInTheDocument()
   })
 
+  it('shows the supplier CNPJ formatted under the name', () => {
+    render(<RequestsTable rows={[row]} />)
+    expect(screen.getByText('10.000.000/0001-45')).toBeInTheDocument()
+  })
+
   it('renders an empty state instead of a bare table', () => {
     render(<RequestsTable rows={[]} />)
-    expect(screen.getByText(/nenhuma solicitação/i)).toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(screen.getByText(/nenhuma solicitação ainda/i)).toBeInTheDocument()
+  })
+
+  it('invites a requester with no requests yet to register one', () => {
+    render(<RequestsTable rows={[]} canCreate />)
+    expect(screen.getByRole('link', { name: /cadastrar solicitação/i })).toHaveAttribute(
+      'href',
+      '/requests/new',
+    )
+  })
+
+  it('offers no registration to finance when the list is empty', () => {
+    render(<RequestsTable rows={[]} />)
+    expect(screen.queryByRole('link', { name: /cadastrar/i })).not.toBeInTheDocument()
+  })
+
+  // Com filtros ativos, "nenhuma ainda" seria mentira: a saída é limpar.
+  it('tells an empty filtered result apart and offers to clear the filters', () => {
+    render(<RequestsTable rows={[]} filtered canCreate />)
+    expect(screen.getByText(/nenhuma solicitação para esses filtros/i)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /limpar filtros/i })).toHaveAttribute(
+      'href',
+      '/requests',
+    )
+    expect(screen.queryByRole('link', { name: /cadastrar/i })).not.toBeInTheDocument()
   })
 
   it('links each row to its detail page', () => {

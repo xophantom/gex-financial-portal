@@ -47,4 +47,12 @@ describe('Pagination', () => {
     expect(screen.getByRole('button', { name: /anterior/i })).toBeDisabled()
     expect(screen.getByRole('button', { name: /próxima/i })).toBeEnabled()
   })
+
+  it('tells where the user is in the list', () => {
+    renderPagination(2, 5)
+
+    expect(screen.getByRole('navigation', { name: /paginação/i })).toHaveTextContent(
+      'Página 2 de 5',
+    )
+  })
 })
