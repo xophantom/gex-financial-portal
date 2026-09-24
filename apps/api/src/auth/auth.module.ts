@@ -12,12 +12,9 @@ import { JwtStrategy } from './strategies/jwt.strategy'
 @Module({
   imports: [
     PassportModule,
-    // registerAsync adia a leitura de JWT_SECRET para a hora em que o Nest
-    // resolve os providers (compile()/create()), não para quando este
-    // arquivo é importado — test/support/test-app.ts só define a env var
-    // depois de subir os containers descartáveis, então a leitura precisa ser tardia
-    // (e igual à de JwtStrategy, senão sign() e verify() usam segredos
-    // diferentes).
+    // registerAsync lê JWT_SECRET quando o Nest resolve os providers, não no
+    // import: os testes só definem o segredo depois de subir os containers.
+    // A leitura é a mesma de JwtStrategy, para sign() e verify() baterem.
     JwtModule.registerAsync({
       useFactory: () => ({ secret: resolveJwtSecret() }),
     }),
@@ -28,11 +25,8 @@ import { JwtStrategy } from './strategies/jwt.strategy'
     JwtStrategy,
     JwtGuard,
     RolesGuard,
-    // Default-nega em vez de opt-in por controller: sem isto, proteção só
-    // existe onde alguém lembrou de escrever @UseGuards, e o próximo
-    // controller que esquecer fica público sem que nenhum teste ou lint
-    // pegue isso. A ordem importa — autenticação (JwtGuard) antes de
-    // autorização (RolesGuard).
+    // Globais e negando por padrão: um controller novo já nasce protegido.
+    // A ordem importa: autenticação (JwtGuard) antes de autorização.
     { provide: APP_GUARD, useClass: JwtGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],

@@ -42,9 +42,8 @@ interface CapturedLine {
 }
 
 describe('buildLogger redaction (through the real logger instance)', () => {
-  // O teste anterior só olhava para redactionOptions.paths — uma lista pode
-  // conter o nome certo e ainda assim nunca ser aplicada de verdade. Este
-  // constrói o logger de produção e lê a linha que ele realmente escreveu.
+  // Constrói o logger de produção e lê a linha escrita: ter o caminho na
+  // lista de redação não prova que ele é aplicado.
   it('replaces password, supplierCnpj and amountCents with [REDACTED] in an emitted line', () => {
     const stream = new CapturingStream()
     const logger = buildLogger(stream)
@@ -135,8 +134,8 @@ describe('buildLogger wired into Nest', () => {
     const correlationId = response.headers[CORRELATION_HEADER] as string | undefined
     expect(correlationId).toBeTruthy()
 
-    // nível 50 = error no pino; é essa linha que prova que o comentário do
-    // filtro ("vai para o log estruturado") deixou de ser ficção.
+    // nível 50 = error no pino: a mensagem original vai para o log, nunca
+    // para a resposta.
     const errorLines = readLines(stream).filter((line) => line.level === 50)
     expect(errorLines).toHaveLength(1)
     expect(errorLines[0].err?.message).toBe('falha ao processar a solicitação no banco de dados')
