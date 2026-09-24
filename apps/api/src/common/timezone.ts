@@ -12,3 +12,13 @@ export function offsetFor(isoDate: string, zone: string): string {
   // correta se a data cair sob horário de verão.
   return part?.value.replace('GMT', '') || '+00:00';
 }
+
+// Data civil (AAAA-MM-DD) de um instante no fuso dado; en-CA já formata assim.
+export function dateInZone(instant: Date, zone: string): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: zone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(instant);
+}

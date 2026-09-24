@@ -6,19 +6,11 @@ let app: TestApp;
 let finance: string;
 let ana: string;
 let bruno: string;
-// Cliente Prisma próprio, igual ao de requests-create.e2e-spec.ts: a
-// verificação de corrida precisa ler a coluna crua do banco, não o
-// endpoint GET sob teste — senão um bug no próprio findOne/toResponse
-// poderia mascarar dois eventos gravados como um só.
+// Prisma direto: conferir a corrida pela coluna crua, não pelo GET sob teste.
 let db: PrismaClient;
 
 const PENDING_OF_ANA = '20000000-0000-4000-8000-000000000001';
 const APPROVED_ID = '20000000-0000-4000-8000-000000000006';
-// ...008 é APPROVED no seed, não REJECTED (conferido contra
-// data/seed_requests.json) — usar aquele id fazia o teste abaixo passar
-// pelo motivo errado (uma solicitação APPROVED também não pode ser
-// aprovada/rejeitada de novo, mas isso não prova nada sobre REJECTED ser
-// estado final). ...015 é de fato REJECTED no seed.
 const REJECTED_ID = '20000000-0000-4000-8000-000000000015';
 const PAID_ID = '20000000-0000-4000-8000-000000000010';
 
@@ -97,15 +89,9 @@ const detailOf = async (
   return response.body as RequestDetailBody;
 };
 
-// Três chamadas Promise.all no mesmo processo Node não garantem que a
-// SELECT de uma pise no UPDATE ainda não commitado de outra: a janela entre
-// ler e escrever é curta demais para o event loop forçar a sobreposição de
-// forma confiável (confirmado batendo a suíte 5x com FOR UPDATE removido —
-// o teste de aprovação continuava passando). Prender a linha por fora, com
-// uma segunda conexão com seu próprio FOR UPDATE, torna a disputa determinística:
-// as N tentativas concorrentes são obrigadas a esperar por essa trava antes
-// de conseguir ler (código correto, com FOR UPDATE) ou escrever (código
-// mutado, sem FOR UPDATE) a mesma linha — nos dois casos.
+// Promise.all sozinho não garante a sobreposição. Uma segunda conexão prende
+// a linha com FOR UPDATE até as N tentativas estarem bloqueadas nela, o que
+// torna a disputa determinística.
 const waitForBlockedWaiters = async (
   expected: number,
   timeoutMs = 5000,
@@ -113,16 +99,8 @@ const waitForBlockedWaiters = async (
   const deadline = Date.now() + timeoutMs;
 
   for (;;) {
-    // Uma sessão esperando por uma linha já travada por FOR UPDATE aparece
-    // em pg_stat_activity como wait_event_type='Lock' — confirmado com um
-    // experimento manual via psql (uma sessão holder + uma waiter) antes de
-    // escrever esta consulta: pg_locks sozinho não bastou, porque o
-    // waitEvent observado alterna entre locktype='transactionid' (esperando
-    // o XID de quem já tem a linha) e, momentaneamente, locktype='tuple'
-    // (o lock curto usado para enfileirar múltiplos esperadores na mesma
-    // linha) — wait_event_type='Lock' cobre os dois em pg_stat_activity sem
-    // depender de qual dos dois mecanismos internos o Postgres está usando
-    // naquele instante.
+    // wait_event_type='Lock' cobre tanto a espera por transactionid quanto
+    // por tuple, que se alternam enquanto várias sessões aguardam a linha.
     const rows = await db.$queryRaw<Array<{ count: bigint }>>`
       SELECT count(*)::bigint AS count
       FROM pg_stat_activity
@@ -160,11 +138,7 @@ const withHeldLock = async <T>(
       lockAcquired();
       await holdReleased;
     },
-    // Prisma fecha uma transação interativa sozinha depois de 5s por
-    // padrão — menos do que o tempo que esta trava precisa ficar aberta
-    // (esperar pg_locks confirmar as N tentativas bloqueadas + as próprias
-    // chamadas HTTP). Sem isto, o Prisma derruba a transação por conta
-    // própria antes do teste liberá-la.
+    // O padrão de 5s do Prisma derrubaria a transação antes da liberação.
     { timeout: 15_000 },
   );
 
@@ -172,9 +146,6 @@ const withHeldLock = async <T>(
 
   try {
     const resultPromise = run();
-    // Só libera depois de confirmar, via pg_stat_activity, que as N
-    // tentativas concorrentes já estão de fato bloqueadas na linha — não um
-    // sleep no escuro torcendo para que tenham chegado a tempo.
     await waitForBlockedWaiters(waiters);
     releaseHold();
     return await resultPromise;
@@ -222,6 +193,16 @@ describe('GET /requests/:id', () => {
   it('offers no action on a final state', async () => {
     const body = await detailOf(finance, PAID_ID);
     expect(body.allowed_actions).toEqual([]);
+  });
+
+  it('refuses a malformed id with 422, like any other invalid input', async () => {
+    const response = await get(finance, 'not-a-uuid').expect(422);
+    const body = response.body as ErrorBody;
+
+    expect(body.error).toEqual({
+      code: 'VALIDATION_ERROR',
+      message: 'Dados inválidos',
+    });
   });
 
   it("returns 404, not 403, for another requester's request", async () => {
@@ -296,10 +277,7 @@ describe('POST /requests/:id/decision', () => {
     },
   );
 
-  // Timeout explícito acima do padrão do Jest (5s): withHeldLock já espera
-  // até 5s só pelo pg_locks confirmar as 3 tentativas bloqueadas, e isso
-  // roda por cima das 3 chamadas HTTP reais — 5s do Jest cortaria o teste
-  // antes do próprio timeout interno do helper conseguir se manifestar.
+  // withHeldLock pode esperar 5s sozinho; daí o timeout maior que o do Jest.
   it('writes exactly one audit event when two approvals race', async () => {
     const target = '20000000-0000-4000-8000-000000000003';
     const before = await detailOf(finance, target);
@@ -318,10 +296,6 @@ describe('POST /requests/:id/decision', () => {
     const after = await detailOf(finance, target);
     expect(after.history).toHaveLength(before.history.length + 1);
 
-    // Confirmação direta na coluna, não pelo GET: duas linhas de auditoria
-    // aqui significariam que o SELECT ... FOR UPDATE não serializou as
-    // três decisões concorrentes, mesmo que o HTTP só tenha devolvido um
-    // 200.
     const approvalEvents = await db.requestStatusEvent.findMany({
       where: {
         requestId: target,
@@ -352,10 +326,64 @@ describe('POST /requests/:id/mark-paid', () => {
   });
 
   it('refuses a payment date in the future', async () => {
-    await markPaid(finance, APPROVED_ID, {
-      paid_at: '2026-12-31',
+    const response = await markPaid(finance, APPROVED_ID, {
+      paid_at: '2026-09-19',
       payment_reference: 'PAG-X',
     }).expect(422);
+
+    const body = response.body as ErrorBody;
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+    expect(body.error.details).toEqual([
+      { field: 'paid_at', message: 'A data de pagamento não pode ser futura' },
+    ]);
+  });
+
+  it.each([
+    '2026-02-31',
+    '2026-13-01',
+    '2026-09-18Tlixo',
+    '2026-09-18T22:00:00-03:00',
+    '18/09/2026',
+  ])('refuses the malformed payment date %s with 422', async (paid_at) => {
+    const response = await markPaid(finance, APPROVED_ID, {
+      paid_at,
+      payment_reference: 'PAG-X',
+    }).expect(422);
+
+    const body = response.body as ErrorBody;
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+    expect(body.error.details?.map((d) => d.field)).toEqual(['paid_at']);
+  });
+
+  // A criação às 23h30 em São Paulo já é o dia seguinte em UTC: a regra tem
+  // que comparar datas no fuso da aplicação, não em UTC.
+  it('refuses a payment dated before the request was created, in São Paulo time', async () => {
+    const target = '20000000-0000-4000-8000-000000000008';
+    await db.request.update({
+      where: { id: target },
+      data: { createdAt: new Date('2026-08-17T23:30:00-03:00') },
+    });
+
+    const response = await markPaid(finance, target, {
+      paid_at: '2026-08-16',
+      payment_reference: 'PAG-X',
+    }).expect(422);
+
+    const body = response.body as ErrorBody;
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+    expect(body.error.details).toEqual([
+      {
+        field: 'paid_at',
+        message:
+          'A data de pagamento não pode ser anterior à criação da solicitação',
+      },
+    ]);
+    expect((await detailOf(finance, target)).request.status).toBe('APPROVED');
+
+    await markPaid(finance, target, {
+      paid_at: '2026-08-17',
+      payment_reference: 'PAG-MESMO-DIA',
+    }).expect(200);
   });
 
   it('stores the payment date from the payload, not the current time', async () => {
@@ -399,13 +427,6 @@ describe('POST /requests/:id/mark-paid', () => {
     }).expect(403);
   });
 
-  // Mesma exigência do enunciado que a corrida de aprovações, agora sobre
-  // APPROVED -> PAID: sem o FOR UPDATE dentro de RequestsRepository.transition,
-  // duas marcações de pagamento simultâneas leriam APPROVED ao mesmo tempo e
-  // gravariam dois eventos de pagamento para a mesma solicitação.
-  // Mesmo motivo do timeout explícito na corrida de aprovações acima:
-  // withHeldLock pode esperar até 5s só pelo pg_locks, por cima das 3
-  // chamadas HTTP reais.
   it('writes exactly one audit event when two mark-paid calls race', async () => {
     const target = APPROVED_ID;
 
@@ -429,9 +450,6 @@ describe('POST /requests/:id/mark-paid', () => {
     expect(results.filter((r) => r.status === 200)).toHaveLength(1);
     expect(results.filter((r) => r.status === 409)).toHaveLength(2);
 
-    // Confirmação direta na coluna, igual à corrida de aprovações acima:
-    // conta o registro cru de auditoria, não o histórico devolvido pelo
-    // GET.
     const paidEvents = await db.requestStatusEvent.findMany({
       where: {
         requestId: target,

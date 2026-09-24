@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { isCalendarDate } from '@gex/shared';
+import { dateInZone } from '../common/timezone';
 
 const CALENDAR_DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
@@ -29,22 +30,11 @@ export class ClockService {
   today(): string {
     if (this.fixedToday) return this.fixedToday;
 
-    // en-CA formata como YYYY-MM-DD, que é exatamente o formato de comparação
-    // usado contra a coluna DATE — evita construir a string à mão.
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone: this.zone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(new Date());
+    return dateInZone(new Date(), this.zone);
   }
 
   currentMonth(): string {
     return this.today().slice(0, 7);
-  }
-
-  now(): Date {
-    return new Date();
   }
 
   timezone(): string {
