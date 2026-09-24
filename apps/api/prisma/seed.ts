@@ -1,9 +1,25 @@
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { PrismaClient, RequestCategory } from '@prisma/client'
 import argon2 from 'argon2'
 
-const DATA = join(__dirname, '../../../data')
+// __dirname aponta para apps/api/prisma em dev (tsx roda o .ts na origem) e
+// para apps/api/dist/prisma quando compilado — o `dist` insere um nível a
+// mais, então uma contagem fixa de "../" acerta um caso e erra o outro.
+// Subimos a árvore até achar a pasta data/ na raiz do monorepo.
+function findDataDir(start: string): string {
+  let dir = start
+  for (let i = 0; i < 8; i += 1) {
+    const candidate = join(dir, 'data')
+    if (existsSync(candidate)) return candidate
+    const parent = dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+  throw new Error(`could not locate the data/ directory upward from ${start}`)
+}
+
+const DATA = findDataDir(__dirname)
 
 const read = <T>(file: string): T[] =>
   JSON.parse(readFileSync(join(DATA, file), 'utf8')) as T[]

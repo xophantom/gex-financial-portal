@@ -1,0 +1,20 @@
+# node_modules e artefatos de build do host nunca entram no contexto: são
+# nativos da plataforma do desenvolvedor (ex.: bindings do argon2) e, se
+# copiados, mascaram um `pnpm install` que deveria rodar de verdade dentro
+# do container Linux.
+**/node_modules
+**/dist
+**/.next
+**/coverage
+**/*.tsbuildinfo
+
+.git
+.gitignore
+.env
+.env.local
+*.log
+.DS_Store
+
+docs
+candidato
+.superpowers
