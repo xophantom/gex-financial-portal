@@ -27,9 +27,8 @@ interface LoggedLine {
 class ProbeController {
   @Get('boom')
   boom(): never {
-    // mensagem benigna de propósito: este teste prova que a mensagem ORIGINAL
-    // chega ao log (Finding 2), não testa redação de campo (isso é
-    // logger.spec.ts) — misturar os dois tornaria o teste contraditório.
+    // Mensagem benigna: aqui se prova que a mensagem original chega ao log;
+    // a redação de campos é testada em logger.spec.ts.
     throw new Error('falha ao processar a solicitação no banco de dados');
   }
 }
@@ -91,10 +90,8 @@ describe('logging wiring (integration)', () => {
     );
     expect(errorLines[0].err?.stack).toBeDefined();
 
-    // O teste que o coordenador mais queria: o correlationId do header da
-    // resposta é byte a byte o mesmo que aparece na linha de log da mesma
-    // requisição — a prova de que o mixin realmente lê o AsyncLocalStorage
-    // que o middleware preencheu para esta requisição, e não outra.
+    // O correlationId do header da resposta é o mesmo da linha de log: o
+    // mixin lê o AsyncLocalStorage preenchido pelo middleware.
     expect(errorLines[0].correlationId).toBe(correlationId);
 
     await app.close();

@@ -20,11 +20,8 @@ export interface Viewer {
 
 type RequestCategoryLabel = CreateRequestInput['category'];
 
-// Direção oposta à do seed (prisma/seed.ts): lá o rótulo com acento vira a
-// chave do enum do Prisma antes de gravar; aqui a chave que o client sempre
-// devolve (SERVICOS) volta a virar o rótulo com acento (SERVIÇOS) que o
-// resto do domínio usa — o client expõe o nome declarado no schema, nunca o
-// valor mapeado para o banco via @map.
+// O client do Prisma expõe a chave do enum (SERVICOS), não o valor do @map;
+// o domínio usa o rótulo com acento (SERVIÇOS).
 const CATEGORY_LABEL = new Map<PrismaRequestCategory, RequestCategoryLabel>([
   ['SOFTWARE', 'SOFTWARE'],
   ['SERVICOS', 'SERVIÇOS'],
@@ -32,10 +29,7 @@ const CATEGORY_LABEL = new Map<PrismaRequestCategory, RequestCategoryLabel>([
   ['INFRAESTRUTURA', 'INFRAESTRUTURA'],
 ]);
 
-// Mesmo mapa, sentido inverso: ao criar, o schema Zod entrega o rótulo
-// acentuado (é o que o resto do domínio usa) mas o Prisma Client só aceita a
-// chave do enum. Derivar do mesmo Map, em vez de declarar uma segunda lista
-// solta, é o que impede as duas direções de um dia divergirem.
+// Derivado do mesmo Map para que as duas direções nunca divirjam.
 const CATEGORY_KEY = new Map<RequestCategoryLabel, PrismaRequestCategory>(
   Array.from(CATEGORY_LABEL, ([key, label]) => [label, key]),
 );
@@ -99,12 +93,8 @@ export class RequestsRepository {
       this.prisma.request.findMany({
         where,
         include: { requester: { select: { id: true, name: true } } },
-        // id como desempate final: dueDate e createdAt não são únicos — duas
-        // linhas com o mesmo vencimento criadas no mesmo milissegundo empatam
-        // nas duas, e sem uma terceira chave que seja de fato única, Postgres
-        // não garante a mesma ordem de empate entre duas consultas
-        // skip/take separadas. Uma escrita concorrente entre a página N e a
-        // N+1 pode então fazer uma linha aparecer duas vezes ou nenhuma.
+        // id como desempate final: sem uma chave única, o Postgres não
+        // garante a mesma ordem entre páginas e uma linha pode repetir ou sumir.
         orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }, { id: 'asc' }],
         skip: (query.page - 1) * query.page_size,
         take: query.page_size,
@@ -134,10 +124,7 @@ export class RequestsRepository {
         include: { requester: { select: { id: true, name: true } } },
       });
 
-      // Auditoria no mesmo commit da criação: uma solicitação sem evento de
-      // abertura violaria "cada transição gera um registro". Se o P2002 do
-      // create acima disparar, esta chamada nunca acontece — não sobra
-      // evento de abertura órfão para uma linha que não existe.
+      // Evento de abertura no mesmo commit: toda transição gera auditoria.
       await tx.requestStatusEvent.create({
         data: {
           id: randomUUID(),
@@ -153,9 +140,7 @@ export class RequestsRepository {
     });
   }
 
-  // Escopo por papel replicado do where() de list(): um REQUESTER só enxerga
-  // a própria solicitação. Aqui, em vez de devolver uma lista vazia, o
-  // método devolve null — é o service quem decide traduzir isso em 404.
+  // Mesmo escopo por papel de list(); null vira 404 no service.
   async findOne(id: string, viewer: Viewer) {
     return this.prisma.request.findFirst({
       // O escopo entra no WHERE, não num if depois da busca: assim o registro
@@ -177,7 +162,7 @@ export class RequestsRepository {
   async transition(
     id: string,
     actorId: string,
-    decide: (current: { status: RequestStatus }) => {
+    decide: (current: { status: RequestStatus; createdAt: Date }) => {
       next: RequestStatus;
       patch: Prisma.RequestUpdateInput;
       reason: string | null;
@@ -187,9 +172,12 @@ export class RequestsRepository {
       // FOR UPDATE serializa decisões concorrentes sobre a mesma solicitação;
       // sem ele, duas aprovações simultâneas leem PENDING e gravam dois eventos.
       const [locked] = await tx.$queryRaw<
-        Array<{ id: string; status: RequestStatus }>
+        Array<{ id: string; status: RequestStatus; createdAt: Date }>
       >`
-        SELECT id, status FROM requests WHERE id = ${id}::uuid FOR UPDATE
+        SELECT id, status, created_at AS "createdAt"
+        FROM requests
+        WHERE id = ${id}::uuid
+        FOR UPDATE
       `;
 
       if (!locked)

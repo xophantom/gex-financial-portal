@@ -1,69 +1,93 @@
-import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import Redis from 'ioredis';
+import { withTimeout } from '../common/with-timeout';
 
+const CONNECT_TIMEOUT_MS = 1_000;
+const COMMAND_TIMEOUT_MS = 500;
+
+// O Redis é acessório (cache do dashboard, idempotência, rate limit), nunca
+// fonte de verdade. Por isso os métodos de dados são "melhor esforço": uma
+// falha vira um aviso no log e um valor neutro (null/false), e quem chama
+// segue pelo banco. Só ping() propaga o erro, porque o health check precisa
+// dele.
 @Injectable()
-export class RedisService implements OnModuleDestroy {
+export class RedisService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(RedisService.name);
+  private available = true;
+
+  // Fail-fast: sem fila offline e com timeout curto por comando, um Redis
+  // fora (ou congelado) custa no máximo COMMAND_TIMEOUT_MS por chamada em vez
+  // de segurar a requisição por segundos de retentativas.
   private readonly client = new Redis(
     process.env.REDIS_URL ?? 'redis://localhost:6379',
-  );
+    {
+      connectTimeout: CONNECT_TIMEOUT_MS,
+      commandTimeout: COMMAND_TIMEOUT_MS,
+      maxRetriesPerRequest: 1,
+      enableOfflineQueue: false,
+    },
+  )
+    // Sem listener, o ioredis imprime "Unhandled error event" a cada
+    // tentativa de reconexão. Só as transições vão para o log.
+    .on('error', (error: Error) => this.markUnavailable(error.message))
+    .on('ready', () => this.markAvailable());
+
+  // Espera a primeira conexão por um instante para os primeiros requests já
+  // usarem o cache; sem Redis, a API sobe assim mesmo, degradada.
+  async onModuleInit(): Promise<void> {
+    if (this.client.status === 'ready') return;
+
+    await withTimeout(
+      new Promise<void>((resolve) => this.client.once('ready', resolve)),
+      CONNECT_TIMEOUT_MS,
+      `Redis não respondeu em ${CONNECT_TIMEOUT_MS}ms`,
+    ).catch((error: Error) => this.markUnavailable(error.message));
+  }
+
+  async get(key: string): Promise<string | null> {
+    return this.attempt('GET', () => this.client.get(key), null);
+  }
 
   async setNx(
     key: string,
     value: string,
     ttlSeconds: number,
   ): Promise<boolean> {
-    return (await this.client.set(key, value, 'EX', ttlSeconds, 'NX')) === 'OK';
+    return this.attempt(
+      'SET NX',
+      async () =>
+        (await this.client.set(key, value, 'EX', ttlSeconds, 'NX')) === 'OK',
+      false,
+    );
   }
 
-  async get(key: string): Promise<string | null> {
-    return this.client.get(key);
-  }
-
-  // Chave exata, não glob: usa DEL diretamente, sem nunca varrer o keyspace.
-  // É isto que qualquer call site que sabe exatamente qual chave apagar deve
-  // chamar — nunca `del(pattern)` abaixo para esse caso.
   async delKey(key: string): Promise<void> {
-    await this.client.del(key);
+    await this.attempt('DEL', () => this.client.del(key), 0);
   }
 
-  // Apagar por padrão ainda pode ser genuinamente necessário (ex.: invalidar
-  // todas as chaves de idempotência de uma entidade, ou um cache por
-  // prefixo) — mas KEYS varre o keyspace inteiro e BLOQUEIA o Redis (que é
-  // single-threaded) até terminar, o que é inaceitável em qualquer caminho
-  // que rode em produção com outras chaves no mesmo banco. SCAN faz o mesmo
-  // trabalho em lotes, com cursor, sem bloquear.
-  async del(pattern: string): Promise<void> {
-    let cursor = '0';
-
-    do {
-      const [nextCursor, keys] = await this.client.scan(
-        cursor,
-        'MATCH',
-        pattern,
-        'COUNT',
-        100,
-      );
-      if (keys.length > 0) await this.client.del(...keys);
-      cursor = nextCursor;
-    } while (cursor !== '0');
+  // null quando o Redis não respondeu: quem chama decide o que fazer sem a
+  // contagem (o rate limit de login, por exemplo, deixa passar).
+  async incrWithTtl(key: string, ttlSeconds: number): Promise<number | null> {
+    return this.attempt(
+      'INCR',
+      async () => {
+        const count = await this.client.incr(key);
+        if (count === 1) await this.client.expire(key, ttlSeconds);
+        return count;
+      },
+      null,
+    );
   }
 
-  async incrWithTtl(key: string, ttlSeconds: number): Promise<number> {
-    const count = await this.client.incr(key);
-    if (count === 1) await this.client.expire(key, ttlSeconds);
-
-    return count;
-  }
-
-  // Sem TTL, ao contrário de incrWithTtl: para um contador de geração (ex.:
-  // dashboard.service.ts), a chave precisa sobreviver indefinidamente — um
-  // TTL que expirasse reiniciaria a contagem do zero, e uma leitura que
-  // capturou a geração alta de antes do reset nunca mais bateria com a
-  // baixa atual. Inofensivo por si só (o pior efeito é um cache miss a
-  // mais), mas sem necessidade nenhuma de aceitar isso quando o caso de uso
-  // é justamente "nunca reiniciar".
-  async incr(key: string): Promise<number> {
-    return this.client.incr(key);
+  // Sem TTL: serve a contadores que nunca podem reiniciar sozinhos, como a
+  // geração do cache do dashboard. by = 0 lê o valor criando a chave em 0.
+  async incrBy(key: string, by: number): Promise<number | null> {
+    return this.attempt('INCRBY', () => this.client.incrby(key, by), null);
   }
 
   async ping(): Promise<void> {
@@ -72,5 +96,35 @@ export class RedisService implements OnModuleDestroy {
 
   onModuleDestroy(): void {
     this.client.disconnect();
+  }
+
+  private async attempt<T>(
+    command: string,
+    run: () => Promise<T>,
+    fallback: T,
+  ): Promise<T> {
+    try {
+      const result = await run();
+      this.markAvailable();
+      return result;
+    } catch (error) {
+      // Nunca a chave no log: ela carrega e-mail (rate limit) e ids.
+      this.markUnavailable(`${command}: ${(error as Error).message}`);
+      return fallback;
+    }
+  }
+
+  private markUnavailable(reason: string): void {
+    if (!this.available) return;
+    this.available = false;
+    this.logger.warn(
+      `Redis indisponível (${reason}); seguindo sem cache, idempotência e rate limit`,
+    );
+  }
+
+  private markAvailable(): void {
+    if (this.available) return;
+    this.available = true;
+    this.logger.log('Redis disponível novamente');
   }
 }

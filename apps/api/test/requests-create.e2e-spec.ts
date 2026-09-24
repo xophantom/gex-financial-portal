@@ -7,12 +7,7 @@ let app: TestApp;
 let requester: string;
 let finance: string;
 let bruno: string;
-// Cliente Prisma próprio, apontado para o mesmo Postgres descartável do
-// Testcontainers (helpers.ts já setou DATABASE_URL antes do compile()). Serve
-// só para ler a coluna crua no teste de corrida: contar via GET /requests
-// exercitaria o mesmo código de leitura que está sob teste, o que mascararia
-// um bug ali (regra do projeto: nunca calcular o valor esperado pelo caminho
-// que está sendo testado).
+// Prisma direto: conferir a corrida pela coluna crua, não pela leitura sob teste.
 let db: PrismaClient;
 
 interface CreatedRequest {
@@ -49,7 +44,8 @@ interface RequestListBody {
 const body = () => ({
   supplier_name: 'Fornecedor Teste',
   supplier_cnpj: '10.000.000/0001-45',
-  invoice_number: `NF-${randomUUID().slice(0, 8)}`,
+  // Já em maiúsculas, como a API normaliza.
+  invoice_number: `NF-${randomUUID().slice(0, 8).toUpperCase()}`,
   amount_cents: 155313,
   competence: '09/2026',
   due_date: '2026-09-30',
@@ -117,6 +113,23 @@ describe('POST /requests', () => {
     expect(conflict.error.code).toBe('DUPLICATE_INVOICE');
   });
 
+  it('treats invoice numbers that differ only in case or spacing as duplicates', async () => {
+    const payload = body();
+    const created = await post(requester, {
+      ...payload,
+      invoice_number: payload.invoice_number.toLowerCase(),
+    }).expect(201);
+    expect((created.body as CreatedRequest).invoice_number).toBe(
+      payload.invoice_number.toUpperCase(),
+    );
+
+    const conflict = await post(requester, {
+      ...payload,
+      invoice_number: `  ${payload.invoice_number.toUpperCase()} `,
+    }).expect(409);
+    expect((conflict.body as ErrorBody).error.code).toBe('DUPLICATE_INVOICE');
+  });
+
   it('creates exactly one row when two identical requests race', async () => {
     const payload = body();
     const results = await Promise.all([
@@ -179,16 +192,8 @@ describe('POST /requests', () => {
     expect(second.id).toBe(first.id);
   });
 
-  // Fix round 1, Finding 1 (crítico) — cenário combinado (corpos
-  // DIFERENTES, mesma chave): a reprodução original do review. Prova que o
-  // comportamento de ponta a ponta está correto para o caso comum (dois
-  // clientes reusando por acidente o mesmo valor de Idempotency-Key, cada um
-  // com sua própria solicitação de verdade) — mas sozinho este teste NÃO
-  // isola o Finding 1: como os corpos diferem, a fingerprint (Finding 2)
-  // também impediria o replay mesmo se a chave não fosse namespaced por
-  // requester (confirmado: rodar este teste com o namespacing desligado e o
-  // fingerprint ligado continua verde). O teste seguinte, com corpos
-  // IDÊNTICOS, é o que isola e mutation-testa o Finding 1 especificamente.
+  // Corpos diferentes: a fingerprint sozinha já impediria o replay. O teste
+  // seguinte, com corpos idênticos, é o que prova o isolamento por usuário.
   it("does not leak one requester's response to another reusing the same Idempotency-Key value with a different body", async () => {
     const key = randomUUID();
     const anaPayload = body();
@@ -213,17 +218,9 @@ describe('POST /requests', () => {
     expect(rows).toHaveLength(2);
   });
 
-  // Fix round 1, Finding 1 (crítico) — isolado: mesmo corpo (mesma
-  // fingerprint) sob a mesma Idempotency-Key, para dois requesters
-  // diferentes. Se a chave Redis não for isolada por requesterId, o
-  // recall() de Bruno encontra o registro de Ana — E a fingerprint bate,
-  // porque o corpo é idêntico — e ele recebe 201 com os dados financeiros
-  // dela (fornecedor, CNPJ, valor, nome), exatamente a reprodução do review
-  // contra o binário compilado. Com a chave corretamente namespaced, o
-  // recall() de Bruno nem encontra o registro de Ana (chaves Redis
-  // diferentes); ele segue para o banco, que recusa com 409 — a mesma
-  // combinação (supplier_cnpj, invoice_number) já existe, não importa de
-  // qual usuário. Nunca deve ser um 201 com a resposta alheia.
+  // Mesmo corpo e mesma chave para outro usuário: sem a chave isolada por
+  // solicitante, Bruno receberia 201 com os dados financeiros de Ana. Com
+  // ela, o pedido chega ao banco e o índice único responde 409.
   it("does not replay another requester's cached response for an identical body under the same Idempotency-Key", async () => {
     const key = randomUUID();
     const payload = body();
@@ -241,13 +238,8 @@ describe('POST /requests', () => {
     expect(JSON.stringify(brunoResponse.body)).not.toContain(ana.requester.id);
   });
 
-  // Fix round 1, Finding 2 (importante): a resposta em cache não era
-  // amarrada ao corpo da requisição. Reusar a mesma chave com um corpo
-  // diferente devolvia a resposta antiga e NUNCA criava a segunda
-  // solicitação — perda silenciosa de um registro financeiro legítimo (a
-  // outra metade do mesmo rastro do Finding 1: Bruno recebia 201 mas sua
-  // própria linha nunca existiu). Este teste prova que a segunda
-  // solicitação, com corpo diferente sob a mesma chave, é criada de verdade.
+  // Mesma chave com outro corpo é outro pedido: tem que ser criado, não
+  // respondido com o replay do primeiro.
   it('does not silently drop a second request when the same key is reused with a different body', async () => {
     const key = randomUUID();
     const firstPayload = body();
@@ -279,6 +271,7 @@ describe('POST /requests', () => {
     [{ amount_cents: 1.5 }, 'amount_cents'],
     [{ amount_cents: '155313' }, 'amount_cents'],
     [{ supplier_cnpj: '10000000000146' }, 'supplier_cnpj'],
+    [{ supplier_cnpj: 'abc10000000000145xyz' }, 'supplier_cnpj'],
     [{ competence: '13/2026' }, 'competence'],
     [{ category: 'OUTROS' }, 'category'],
     [{ supplier_name: '' }, 'supplier_name'],

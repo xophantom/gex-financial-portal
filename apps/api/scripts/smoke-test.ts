@@ -12,9 +12,7 @@ const DATABASE_URL =
   'postgresql://gex:gex_local_password@localhost:5432/gex_finance_test';
 const APP_TODAY = process.env.APP_TODAY ?? '2026-09-18';
 const APP_TIMEZONE = process.env.APP_TIMEZONE ?? 'America/Sao_Paulo';
-// AuthModule agora recusa subir sem estas duas (Tarefa 11, fix round 1): sem
-// passá-las aqui, este script pararia de funcionar, não por bug do smoke
-// test, mas porque o app está fazendo exatamente o que devia.
+// AuthModule recusa subir sem os dois segredos JWT.
 const JWT_SECRET = process.env.JWT_SECRET ?? 'smoke-test-jwt-secret';
 const JWT_REFRESH_SECRET =
   process.env.JWT_REFRESH_SECRET ?? 'smoke-test-jwt-refresh-secret';

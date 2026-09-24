@@ -12,7 +12,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { ClockService } from '../clock/clock.service';
 import { AppException } from '../common/http-exception.filter';
-import { offsetFor } from '../common/timezone';
+import { dateInZone, offsetFor } from '../common/timezone';
 import { DashboardService } from '../dashboard/dashboard.service';
 import { IdempotencyService } from './idempotency.service';
 import {
@@ -25,18 +25,11 @@ type RequestWithRequester = Prisma.RequestGetPayload<{
   include: { requester: { select: { id: true; name: true } } };
 }>;
 
-// Nomes de coluna (snake_case), como o Postgres/Prisma os relata em
-// meta.target — confirmado batendo em um P2002 real contra o schema desta
-// tabela, não assumido.
+// Nomes de coluna como o Prisma os relata em meta.target num P2002.
 const DUPLICATE_INVOICE_COLUMNS = ['supplier_cnpj', 'invoice_number'];
 
-// P2002 dispara para QUALQUER violação de unicidade na tabela, não só a de
-// negócio — Request.id e RequestStatusEvent.id também são colunas únicas
-// (chaves primárias geradas por randomUUID()). Hoje elas nunca colidem, mas
-// "não é alcançável hoje" já mordeu este projeto quatro vezes: no dia em que
-// alguém acrescentar uma nova constraint única a Request ou
-// RequestStatusEvent, um P2002 dela seria erroneamente reportado ao cliente
-// como "nota duplicada" sem esta checagem do meta.target.
+// P2002 vale para qualquer constraint única (inclusive chaves primárias);
+// só a de (CNPJ, nota) é "nota duplicada".
 function isDuplicateInvoiceViolation(
   error: unknown,
 ): error is Prisma.PrismaClientKnownRequestError {
@@ -53,6 +46,12 @@ function isDuplicateInvoiceViolation(
     target.length === DUPLICATE_INVOICE_COLUMNS.length &&
     DUPLICATE_INVOICE_COLUMNS.every((column) => target.includes(column))
   );
+}
+
+function paidAtError(message: string): AppException {
+  return new AppException('VALIDATION_ERROR', message, 422, [
+    { field: 'paid_at', message },
+  ]);
 }
 
 @Injectable()
@@ -82,9 +81,6 @@ export class RequestsService {
     requester: Viewer,
     idempotencyKey?: string,
   ) {
-    // Calculada uma vez, mesmo antes de saber se vai replay ou criar: tem que
-    // ser exatamente a mesma fingerprint tanto na leitura (recall) quanto na
-    // escrita (remember) para uma requisição idêntica bater consigo mesma.
     const fingerprint = idempotencyKey
       ? this.idempotency.fingerprint(input)
       : undefined;
@@ -101,12 +97,6 @@ export class RequestsService {
     const created = await this.repository
       .create(input, requester.id)
       .catch((error: unknown) => {
-        // PrismaClientKnownRequestError vem de @prisma/client, que apps/api
-        // importa direto (não de @gex/shared, que é ESM) — então, ao
-        // contrário de ZodError, instanceof é seguro aqui.
-        // isDuplicateInvoiceViolation ainda confirma QUAL constraint disparou
-        // (ver comentário na função) antes de traduzir para o código de
-        // negócio.
         if (isDuplicateInvoiceViolation(error)) {
           throw new AppException(
             'DUPLICATE_INVOICE',
@@ -127,11 +117,8 @@ export class RequestsService {
       );
     }
 
-    // Só no ramo de criação de verdade, nunca no replay acima (que devolve
-    // antes de chegar aqui): um replay não muda nenhuma linha em requests,
-    // então invalidar o dashboard ali seria trabalho sem efeito nenhum no
-    // agregado. Uma criação nova sempre muda pending_amount_cents — do
-    // próprio solicitante e do total que financeiro vê.
+    // Depois do commit e nunca lança (Redis é melhor esforço): uma falha aqui
+    // não pode transformar uma escrita gravada em erro para o cliente.
     await this.dashboard.invalidate();
 
     return response;
@@ -178,23 +165,37 @@ export class RequestsService {
       },
     );
 
-    // transition() só resolve depois de um UPDATE de verdade (assertTransition
-    // já teria lançado antes disso para uma transição inválida) — então
-    // chegar aqui sempre significa que pending/approved mudaram para o
-    // financeiro e para o solicitante dono da linha.
     await this.dashboard.invalidate();
 
     return this.toResponse(updated, this.clock.today());
   }
 
   async markPaid(id: string, input: MarkPaidInput, actor: Viewer) {
-    const paidAt = this.resolvePaidAt(input.paid_at);
+    const zone = this.clock.timezone();
+
+    // AAAA-MM-DD compara como string; hoje e a criação são datas civis no
+    // fuso da aplicação, não em UTC.
+    if (input.paid_at > this.clock.today()) {
+      throw paidAtError('A data de pagamento não pode ser futura');
+    }
+
+    // Meio-dia, não meia-noite: longe da virada do dia, nenhuma conversão de
+    // fuso leva o pagamento para a data vizinha.
+    const paidAt = new Date(
+      `${input.paid_at}T12:00:00${offsetFor(input.paid_at, zone)}`,
+    );
 
     const updated = await this.repository.transition(
       id,
       actor.id,
       (current) => {
         this.assertTransition(current.status, 'PAID');
+
+        if (input.paid_at < dateInZone(current.createdAt, zone)) {
+          throw paidAtError(
+            'A data de pagamento não pode ser anterior à criação da solicitação',
+          );
+        }
 
         return {
           next: 'PAID' as const,
@@ -206,10 +207,6 @@ export class RequestsService {
       },
     );
 
-    // Mesmo raciocínio do decide() acima: só chega aqui depois de um UPDATE
-    // de verdade para PAID, que move dinheiro de approved_amount_cents para
-    // paid_this_month_amount_cents tanto para financeiro quanto para o
-    // solicitante dono da linha.
     await this.dashboard.invalidate();
 
     return this.toResponse(updated, this.clock.today());
@@ -223,31 +220,6 @@ export class RequestsService {
         409,
       );
     }
-  }
-
-  private resolvePaidAt(input: string): Date {
-    const zone = this.clock.timezone();
-    // Meio-dia, não meia-noite: meia-noite fica a poucas horas da fronteira do
-    // dia e qualquer conversão de fuso empurra o pagamento para o dia anterior.
-    const resolved = input.includes('T')
-      ? new Date(input)
-      : new Date(`${input}T12:00:00${offsetFor(input, zone)}`);
-
-    if (resolved.toISOString().slice(0, 10) > this.clock.today()) {
-      throw new AppException(
-        'VALIDATION_ERROR',
-        'A data de pagamento não pode ser futura',
-        422,
-        [
-          {
-            field: 'paid_at',
-            message: 'A data de pagamento não pode ser futura',
-          },
-        ],
-      );
-    }
-
-    return resolved;
   }
 
   private toResponse(row: RequestWithRequester, today: string) {

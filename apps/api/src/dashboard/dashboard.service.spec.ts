@@ -21,31 +21,39 @@ interface FakeRow {
 /* eslint-disable @typescript-eslint/require-await -- fakes precisam devolver
    Promise para bater com a assinatura real dos métodos assíncronos que
    substituem. */
-function build(row: FakeRow) {
+function build(row: FakeRow, redisUp = true) {
   const repository = { summary: jest.fn(async () => row) };
   const clock = {
     today: jest.fn(() => '2026-09-18'),
     currentMonth: jest.fn(() => '2026-09'),
     timezone: jest.fn(() => 'America/Sao_Paulo'),
   };
-  // Redis falso, em memória: suficiente para exercitar get/setNx sem
-  // Testcontainers — este teste é sobre a conversão BigInt→Number, não sobre
-  // o Redis de verdade (isso já é coberto pelos e2e).
+  // Redis em memória com a mesma semântica de melhor esforço do real: fora
+  // do ar, tudo devolve o valor neutro (null/false).
   const store = new Map<string, string>();
   const redis = {
-    get: jest.fn(async (key: string) => store.get(key) ?? null),
+    get: jest.fn(async (key: string) =>
+      redisUp ? (store.get(key) ?? null) : null,
+    ),
     setNx: jest.fn(async (key: string, value: string) => {
-      if (store.has(key)) return false;
+      if (!redisUp || store.has(key)) return false;
       store.set(key, value);
       return true;
     }),
+    incrBy: jest.fn(async (key: string, by: number) => {
+      if (!redisUp) return null;
+      const next = Number(store.get(key) ?? 0) + by;
+      store.set(key, String(next));
+      return next;
+    }),
   };
 
-  return new DashboardService(
+  const service = new DashboardService(
     repository as never,
     clock as never,
     redis as never,
   );
+  return { service, repository, redis };
 }
 /* eslint-enable @typescript-eslint/require-await */
 
@@ -61,14 +69,10 @@ const baseRow: FakeRow = {
   paid_count: 0n,
 };
 
-describe('DashboardService — overflow safety (fix round 1, finding 1)', () => {
-  // Number(bigint) acima de Number.MAX_SAFE_INTEGER arredonda em silêncio
-  // para o double mais próximo em vez de lançar — exatamente a armadilha que
-  // BigIntInterceptor.convert() existe para fechar (Tarefa 7). Este teste
-  // prova que o dashboard usa esse mesmo `convert()`, e não Number() direto,
-  // no caminho que grava no Redis.
+describe('DashboardService — overflow safety', () => {
+  // Number(bigint) arredondaria em silêncio acima de MAX_SAFE_INTEGER.
   it('throws instead of silently rounding an amount above Number.MAX_SAFE_INTEGER', async () => {
-    const service = build({
+    const { service } = build({
       ...baseRow,
       pending_amount_cents: BigInt(Number.MAX_SAFE_INTEGER) + 10n,
     });
@@ -76,16 +80,48 @@ describe('DashboardService — overflow safety (fix round 1, finding 1)', () => 
     await expect(service.summary(viewer)).rejects.toThrow(/safe integer range/);
   });
 
-  // O valor "fresco" (cache miss) sai do service ainda em BigInt, igual a
-  // amount_cents em RequestsService.toResponse() — só o BigIntInterceptor
-  // global (na borda HTTP) ou convert() (na gravação no Redis, coberto pelo
-  // teste acima) convertem para Number. Chamar o service diretamente, sem
-  // passar pelo interceptor, é o que expõe esse tipo intermediário.
+  // Só o BigIntInterceptor, na borda HTTP, converte o valor fresco.
   it('keeps the fresh value as BigInt for the HTTP interceptor to convert', async () => {
-    const service = build({ ...baseRow, pending_amount_cents: 875_049n });
+    const { service } = build({ ...baseRow, pending_amount_cents: 875_049n });
 
     const result = await service.summary(viewer);
     expect(result.pending_amount_cents).toBe(875_049n);
     expect(typeof result.pending_amount_cents).toBe('bigint');
+  });
+});
+
+describe('DashboardService — cache', () => {
+  it('serves the second read from the cache', async () => {
+    const { service, repository } = build(baseRow);
+
+    await service.summary(viewer);
+    await service.summary(viewer);
+
+    expect(repository.summary).toHaveBeenCalledTimes(1);
+  });
+
+  it('queries again after invalidate()', async () => {
+    const { service, repository } = build(baseRow);
+
+    await service.summary(viewer);
+    await service.invalidate();
+    await service.summary(viewer);
+
+    expect(repository.summary).toHaveBeenCalledTimes(2);
+  });
+
+  it('falls back to the database without caching when Redis is down', async () => {
+    const { service, repository, redis } = build(
+      { ...baseRow, pending_amount_cents: 42n },
+      false,
+    );
+
+    const first = await service.summary(viewer);
+    await service.summary(viewer);
+    await expect(service.invalidate()).resolves.toBeUndefined();
+
+    expect(first.pending_amount_cents).toBe(42n);
+    expect(repository.summary).toHaveBeenCalledTimes(2);
+    expect(redis.get).not.toHaveBeenCalled();
   });
 });

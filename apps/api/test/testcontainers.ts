@@ -27,8 +27,8 @@ export async function stopTestDatabase(): Promise<void> {
 // StartedTestContainer (testcontainers 12.1.0) não expõe pause()/unpause();
 // `docker pause`/`unpause` no id do container real produz o mesmo efeito —
 // congela o processo sem derrubar a porta mapeada nem o container em si —
-// que é o que a Tarefa 16 precisa para exercitar o /health degradado sem
-// recriar (e sem perder o estado de) o container inteiro.
+// que basta para simular indisponibilidade sem recriar o container nem
+// perder seu estado.
 export function pauseTestDatabase(): void {
   if (!container) throw new Error('test database container is not running');
   execSync(`docker pause ${container.getId()}`);

@@ -243,11 +243,8 @@ describe('GET /requests pagination has a total order', () => {
   let prisma: PrismaClient;
 
   beforeAll(async () => {
-    // process.env.DATABASE_URL já foi setado por createTestApp() (chamado no
-    // beforeAll do topo do arquivo, que roda antes de qualquer describe
-    // filho) — um client Prisma próprio, fora do pool da aplicação, deixa
-    // este teste simular escritas concorrentes sem precisar de nenhuma rota
-    // de escrita (a Tarefa 12 só implementa leitura).
+    // Prisma direto (DATABASE_URL já setado por createTestApp) para simular
+    // escritas concorrentes entre duas páginas.
     prisma = new PrismaClient();
 
     // Mesmo due_date e mesmo created_at para todas: sem um desempate único

@@ -72,23 +72,43 @@ describe('HttpExceptionFilter', () => {
     ]);
   });
 
-  it('maps a Nest NotFoundException to NOT_FOUND', () => {
-    expect(capture(new NotFoundException()).body.error.code).toBe('NOT_FOUND');
+  it('maps the router 404 to NOT_FOUND with a Portuguese message', () => {
+    const { status, body } = capture(new NotFoundException('Cannot GET /x'));
+
+    expect(status).toBe(404);
+    expect(body).toEqual({
+      error: { code: 'NOT_FOUND', message: 'Rota não encontrada' },
+    });
   });
 
-  it('maps a Nest BadRequestException to VALIDATION_ERROR at 400', () => {
+  // ParseUUIDPipe e JSON malformado chegam como BadRequestException.
+  it('maps a Nest BadRequestException to VALIDATION_ERROR at 422', () => {
     const { status, body } = capture(
-      new BadRequestException('payload inválido'),
+      new BadRequestException('Validation failed (uuid is expected)'),
     );
 
-    expect(status).toBe(400);
-    expect(body.error.code).toBe('VALIDATION_ERROR');
+    expect(status).toBe(422);
+    expect(body).toEqual({
+      error: { code: 'VALIDATION_ERROR', message: 'Dados inválidos' },
+    });
   });
 
+  it('maps a body-parser client error instead of answering 500', () => {
+    const tooLarge = Object.assign(new Error('request entity too large'), {
+      status: 413,
+      expose: true,
+    });
+
+    const { status, body } = capture(tooLarge);
+
+    expect(status).toBe(413);
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+    expect(body.error.message).toBe('O corpo da requisição é grande demais');
+  });
+
+  // Um ConflictException genérico não diz qual conflito é; os de negócio usam
+  // AppException com código próprio.
   it('maps a Nest ConflictException to the generic CONFLICT at 409', () => {
-    // 409 cobre mais de um tipo de conflito (nota duplicada, transição de
-    // status inválida etc.); um ConflictException genérico não carrega qual
-    // dos dois é, então cai no código genérico, não em DUPLICATE_INVOICE.
     const { status, body } = capture(new ConflictException('conflito'));
 
     expect(status).toBe(409);

@@ -13,15 +13,8 @@ interface ZodLikeError extends Error {
   issues: { path: (string | number)[]; message: string }[];
 }
 
-// Não usa `instanceof ZodError`: apps/api compila para CommonJS (tsconfig
-// "nodenext" sem "type": "module") e faz require('zod'), enquanto @gex/shared
-// é ESM e importa 'zod' via import — o pacote zod 3.25.x publica builds CJS e
-// ESM genuinamente separados (dois arquivos, não um wrapper fino), então são
-// duas classes ZodError distintas em runtime e instanceof falha, caindo no
-// branch genérico de 500. Confirmado batendo no binário compilado de
-// verdade: login com e-mail inválido e GET /requests?page=0 voltavam 500 em
-// vez de 422. Checar a forma do erro (nome + issues), em vez da identidade
-// da classe, funciona não importa de qual build do zod ele veio.
+// Pela forma, não por `instanceof ZodError`: a API (CommonJS) e o
+// @gex/shared (ESM) carregam builds diferentes do zod, com classes distintas.
 function isZodLikeError(exception: unknown): exception is ZodLikeError {
   return (
     exception instanceof Error &&
@@ -41,20 +34,67 @@ export class AppException extends Error {
   }
 }
 
-const STATUS_TO_CODE: Record<number, ErrorCode> = {
-  [HttpStatus.BAD_REQUEST]: 'VALIDATION_ERROR',
-  [HttpStatus.UNAUTHORIZED]: 'UNAUTHENTICATED',
-  [HttpStatus.FORBIDDEN]: 'FORBIDDEN',
-  [HttpStatus.NOT_FOUND]: 'NOT_FOUND',
-  // 409 é o status de mais de um tipo de conflito (nota duplicada, transição
-  // de status inválida etc.) e o filtro não tem como inferir qual, só pelo
-  // status, então mapeia para um código genérico. Um conflito específico deve
-  // ser lançado como AppException com o código próprio (ex.: DUPLICATE_INVOICE,
-  // INVALID_TRANSITION), não como um ConflictException genérico.
-  [HttpStatus.CONFLICT]: 'CONFLICT',
-  [HttpStatus.TOO_MANY_REQUESTS]: 'TOO_MANY_REQUESTS',
-  [HttpStatus.UNPROCESSABLE_ENTITY]: 'VALIDATION_ERROR',
+interface HttpErrorMapping {
+  code: ErrorCode;
+  message: string;
+  status?: number;
+}
+
+// Erros do Nest e do Express chegam com texto em inglês ("Cannot GET /x",
+// "Unexpected token..."); a resposta usa uma mensagem fixa em PT-BR. 400 vira
+// 422 para que dado inválido (UUID, JSON malformado) tenha um status só.
+// Conflitos específicos usam AppException (DUPLICATE_INVOICE etc.).
+const HTTP_ERRORS: Record<number, HttpErrorMapping> = {
+  [HttpStatus.BAD_REQUEST]: {
+    status: HttpStatus.UNPROCESSABLE_ENTITY,
+    code: 'VALIDATION_ERROR',
+    message: 'Dados inválidos',
+  },
+  [HttpStatus.UNAUTHORIZED]: {
+    code: 'UNAUTHENTICATED',
+    message: 'Não autenticado',
+  },
+  [HttpStatus.FORBIDDEN]: { code: 'FORBIDDEN', message: 'Acesso negado' },
+  [HttpStatus.NOT_FOUND]: { code: 'NOT_FOUND', message: 'Rota não encontrada' },
+  [HttpStatus.CONFLICT]: { code: 'CONFLICT', message: 'Conflito' },
+  [HttpStatus.PAYLOAD_TOO_LARGE]: {
+    code: 'VALIDATION_ERROR',
+    message: 'O corpo da requisição é grande demais',
+  },
+  [HttpStatus.UNPROCESSABLE_ENTITY]: {
+    code: 'VALIDATION_ERROR',
+    message: 'Dados inválidos',
+  },
+  [HttpStatus.TOO_MANY_REQUESTS]: {
+    code: 'TOO_MANY_REQUESTS',
+    message: 'Muitas tentativas. Tente novamente em instantes.',
+  },
 };
+
+// body-parser rejeita com http-errors (ex.: 413), que não são HttpException.
+function httpStatusOf(exception: unknown): number | undefined {
+  if (exception instanceof HttpException) return exception.getStatus();
+
+  const candidate = exception as { status?: unknown; expose?: unknown };
+  if (
+    exception instanceof Error &&
+    candidate.expose === true &&
+    typeof candidate.status === 'number'
+  ) {
+    return candidate.status;
+  }
+
+  return undefined;
+}
+
+function mappingFor(status: number): HttpErrorMapping {
+  return (
+    HTTP_ERRORS[status] ??
+    (status >= 500
+      ? { code: 'INTERNAL_ERROR', message: 'Erro interno' }
+      : { code: 'VALIDATION_ERROR', message: 'Requisição inválida' })
+  );
+}
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -88,20 +128,18 @@ export class HttpExceptionFilter implements ExceptionFilter {
       return;
     }
 
-    if (exception instanceof HttpException) {
-      const status = exception.getStatus();
-      response.status(status).json({
-        error: {
-          code: STATUS_TO_CODE[status] ?? 'INTERNAL_ERROR',
-          message: exception.message,
-        },
+    const status = httpStatusOf(exception);
+    if (status !== undefined) {
+      if (status >= 500) this.logger.error(exception);
+      const mapping = mappingFor(status);
+      response.status(mapping.status ?? status).json({
+        error: { code: mapping.code, message: mapping.message },
       });
       return;
     }
 
-    // A mensagem original pode conter connection string ou segredo; o detalhe
-    // vai para o log estruturado (nível error, com correlationId via mixin),
-    // nunca para a resposta.
+    // A mensagem original pode conter connection string ou segredo: vai só
+    // para o log estruturado, nunca para a resposta.
     this.logger.error(
       exception instanceof Error ? exception : new Error(String(exception)),
     );

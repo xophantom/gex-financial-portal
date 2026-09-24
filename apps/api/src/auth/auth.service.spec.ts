@@ -23,32 +23,22 @@ const user = {
 const jwt = { signAsync: jest.fn(async () => 'token'), verifyAsync: jest.fn() };
 /* eslint-enable @typescript-eslint/require-await */
 
-// Fake de verdade (contador em memória), não um mock que sempre devolve o
-// mesmo valor: os testes de reset e de limite por IP precisam que
-// incrWithTtl acumule por chave e que del zere — sem isso não haveria como
-// provar "nove falhas, um sucesso, nove falhas de novo, todas alcançáveis"
-// nem "trinta e-mails diferentes do mesmo IP acabam em 429".
-// delKey aqui é um Map.delete exato — o mesmo contrato do delKey real
-// (client.del(key) direto). Isto já era verdade sem querer antes (quando o
-// call site chamava `del`, mas o real `del` era por glob via KEYS): o fake
-// não refletia o real, e esse desalinhamento escondeu o bug do KEYS. Agora
-// que o call site usa delKey de verdade, os dois lados usam a mesma
-// semântica de chave exata — não há mais o que divergir.
+// Contador em memória, não um mock fixo: os testes de reset e de limite por
+// IP dependem de incrWithTtl acumular por chave e de delKey zerar só a sua.
 /* eslint-disable @typescript-eslint/require-await -- assíncronas para que o
    valor de retorno continue compatível com mockResolvedValueOnce, usado
    abaixo por um teste já existente. */
 function createFakeRedis() {
   const counts = new Map<string, number>();
   return {
-    // Precisa aceitar o segundo argumento (ttlSeconds) para bater com a
-    // assinatura real de incrWithTtl(key, ttlSeconds); o fake não expira nada
-    // de verdade, daí o eslint-disable na própria linha.
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    incrWithTtl: jest.fn(async (key: string, ttlSeconds: number) => {
-      const next = (counts.get(key) ?? 0) + 1;
-      counts.set(key, next);
-      return next;
-    }),
+    // Mesma assinatura do real (key, ttlSeconds); o fake não expira nada.
+    incrWithTtl: jest.fn<Promise<number | null>, [string, number]>(
+      async (key) => {
+        const next = (counts.get(key) ?? 0) + 1;
+        counts.set(key, next);
+        return next;
+      },
+    ),
     delKey: jest.fn(async (key: string) => {
       counts.delete(key);
     }),
@@ -70,12 +60,7 @@ const build = (found: typeof user | null) =>
     redis as never,
   );
 
-// Substitui o `.catch((e) => e)` do enunciado: aquele padrão só type-checa
-// porque `noImplicitAny` está desligado neste projeto (o catch sem anotação
-// vira `any`, que o ESLint recusa). Isto devolve o mesmo AppException, mas
-// com tipo real — e, se a promise resolver em vez de rejeitar (o que não
-// deveria acontecer nestes dois testes), lança nomeando o valor recebido em
-// vez de devolvê-lo como se fosse um AppException.
+// Devolve o AppException tipado; se a promise resolver, falha nomeando o valor.
 async function captureRejection(
   promise: Promise<unknown>,
 ): Promise<AppException> {
@@ -92,10 +77,7 @@ async function captureRejection(
 }
 
 beforeAll(async () => {
-  // AuthService agora exige JWT_REFRESH_SECRET na construção (fix round 1:
-  // sem fallback, para não colapsar access e refresh token na mesma chave
-  // quando a env var falta). build() constrói um AuthService de verdade em
-  // cada teste, então isto precisa estar setado antes do primeiro deles.
+  // AuthService exige JWT_REFRESH_SECRET na construção.
   process.env.JWT_REFRESH_SECRET = 'auth-service-spec-refresh-secret';
   user.passwordHash = await argon2.hash('GexRequester123!', {
     type: argon2.argon2id,
@@ -103,11 +85,7 @@ beforeAll(async () => {
 });
 
 describe('AuthService construction', () => {
-  // Task 10 lesson, applied to config instead of wiring: a guard que existe
-  // mas é silenciosamente contornável não protege nada. Sem este teste,
-  // remover a checagem (ou reintroduzir um fallback) devolveria a suíte
-  // inteira ao verde, porque nenhum outro teste aqui prova que a env var é
-  // obrigatória.
+  // Um fallback aqui colapsaria access e refresh token na mesma chave.
   it('refuses to construct without JWT_REFRESH_SECRET', () => {
     const saved = process.env.JWT_REFRESH_SECRET;
     delete process.env.JWT_REFRESH_SECRET;
@@ -169,12 +147,8 @@ describe('AuthService.login timing', () => {
     return sorted[Math.floor(sorted.length / 2)];
   };
 
-  // Mede contra o binário real: e-mail inexistente (3.6ms) vs conta existente
-  // com senha errada (43.5ms) — 12x de diferença porque argon2.verify só roda
-  // no segundo caso. Vários samples + mediana, não uma amostra só, para não
-  // ficar flaky com uma variação pontual de CPU; ainda assim tem que
-  // continuar falhando se o verify contra o hash fictício for removido —
-  // verificado abaixo, revertendo a correção antes de aplicá-la.
+  // Sem o verify contra o hash fictício, a diferença é de ~12x. Mediana de
+  // várias amostras para não oscilar com a CPU.
   it('takes a comparable amount of time for an unknown email and a wrong password', async () => {
     const SAMPLES = 7;
     const knownTimes: number[] = [];
@@ -237,10 +211,7 @@ describe('AuthService rate limiting', () => {
     ).rejects.toMatchObject({ status: 429 });
   });
 
-  // Fix round 3: o contador por IP só devia contar FALHA. Antes, um sucesso
-  // também incrementava — um escritório inteiro atrás do mesmo NAT batendo
-  // 30 logins bem-sucedidos numa manhã comum se autobaniria sem que ninguém
-  // tivesse digitado uma senha errada.
+  // Um escritório atrás do mesmo NAT não pode se bloquear com logins válidos.
   it('does not count a successful login against the per-IP limit', async () => {
     for (let i = 0; i < MAX_ATTEMPTS_PER_IP - 1; i++) {
       await expect(
@@ -258,27 +229,39 @@ describe('AuthService rate limiting', () => {
     ).rejects.toMatchObject({ status: 401 });
   });
 
-  // Fix round 3: del(pattern) via KEYS apagaria qualquer chave que desse
-  // match no padrão, não só a do e-mail que logou — um delete por glob
-  // barato de escrever e caro de descobrir em produção. delKey(key) só pode
-  // afetar a própria chave; este teste é exatamente o que pegaria uma
-  // regressão de volta para um delete por padrão.
   it('deletes only its own key on success, leaving unrelated rate-limit keys untouched', async () => {
-    // Popula a chave alheia antes: login() vai incrementar e depois apagar a
-    // sua própria chave (login:email:solicitante@gex.test) como parte do
-    // próprio fluxo — o que importa aqui é o que sobra da OUTRA.
     await redis.incrWithTtl('login:email:outro.solicitante@gex.test', 300);
 
     await build(user).login('solicitante@gex.test', 'GexRequester123!', IP);
 
-    // A própria chave foi apagada: o próximo incremento reinicia do zero.
     expect(
       await redis.incrWithTtl('login:email:solicitante@gex.test', 300),
     ).toBe(1);
-    // A chave alheia sobreviveu: continua de onde estava (1 -> 2), não
-    // reiniciou (o que aconteceria se ela tivesse sido apagada também).
     expect(
       await redis.incrWithTtl('login:email:outro.solicitante@gex.test', 300),
     ).toBe(2);
+  });
+});
+
+describe('AuthService with Redis unavailable', () => {
+  // incrWithTtl devolve null quando o Redis não responde: fail-open.
+  it('still logs in without a rate-limit count', async () => {
+    redis.incrWithTtl.mockResolvedValue(null);
+
+    const result = await build(user).login(
+      'solicitante@gex.test',
+      'GexRequester123!',
+      IP,
+    );
+
+    expect(result.access_token).toBe('token');
+  });
+
+  it('still answers 401, not 429, for a wrong password', async () => {
+    redis.incrWithTtl.mockResolvedValue(null);
+
+    await expect(
+      build(user).login('solicitante@gex.test', 'wrong', IP),
+    ).rejects.toMatchObject({ status: 401 });
   });
 });

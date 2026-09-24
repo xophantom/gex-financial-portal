@@ -14,23 +14,20 @@ interface StoredIdempotencyRecord {
 export class IdempotencyService {
   constructor(private readonly redis: RedisService) {}
 
-  // sha256 do input já validado e normalizado pelo Zod (CNPJ em 14 dígitos,
-  // competência AAAA-MM etc.), não do corpo cru — duas requisições
-  // logicamente iguais com formatação de entrada diferente (ex.: CNPJ com ou
-  // sem máscara) ainda produzem a mesma fingerprint.
+  // Sobre o input já normalizado pelo Zod: CNPJ com ou sem máscara gera a
+  // mesma fingerprint.
   fingerprint(input: unknown): string {
     return createHash('sha256').update(JSON.stringify(input)).digest('hex');
   }
 
-  // Isolada por requesterId: sem isto, dois usuários que por acidente (ou por
-  // um cliente HTTP mal configurado) reusassem o mesmo valor de cabeçalho
-  // Idempotency-Key compartilhavam a mesma entrada no Redis — um recebia a
-  // resposta com os dados financeiros do outro (fornecedor, CNPJ, valor,
-  // nome do solicitante).
+  // Por solicitante: a mesma Idempotency-Key vinda de outro usuário nunca
+  // pode devolver a resposta (e os dados financeiros) de quem a usou antes.
   private key(requesterId: string, key: string): string {
     return `idempotency:${requesterId}:${key}`;
   }
 
+  // Com o Redis fora, get() devolve null e o pedido segue para o banco, onde
+  // o índice único (CNPJ, nota) continua impedindo a duplicata.
   async recall(
     requesterId: string,
     key: string,
@@ -40,13 +37,8 @@ export class IdempotencyService {
     if (!stored) return null;
 
     const record = JSON.parse(stored) as StoredIdempotencyRecord;
-    // Corpo diferente sob a mesma chave não é um retry do mesmo pedido — é
-    // outro pedido colidindo por acidente na chave (duas bibliotecas de
-    // retry gerando o mesmo UUID, ou um cliente que chaveia por sessão em
-    // vez de por requisição). Repetir a resposta antiga entregaria uma
-    // solicitação que nunca foi criada como se tivesse sido — perda
-    // silenciosa do segundo pedido. Devolver null aqui faz o service seguir
-    // para o banco, onde o índice único arbitra de verdade.
+    // Corpo diferente sob a mesma chave é outro pedido, não um retry:
+    // repetir a resposta antiga descartaria o segundo em silêncio.
     return record.fingerprint === fingerprint ? record.response : null;
   }
 
@@ -56,10 +48,7 @@ export class IdempotencyService {
     fingerprint: string,
     payload: unknown,
   ): Promise<void> {
-    // O payload vem direto do service, com amount_cents ainda em BigInt (só o
-    // BigIntInterceptor global converte, e isso acontece depois, na saída do
-    // controller). JSON.stringify não serializa BigInt — sem convert() aqui,
-    // um replay de Idempotency-Key derrubava a requisição com 500.
+    // amount_cents ainda é BigInt aqui, e JSON.stringify não o serializa.
     const record: StoredIdempotencyRecord = { fingerprint, response: payload };
     await this.redis.setNx(
       this.key(requesterId, key),

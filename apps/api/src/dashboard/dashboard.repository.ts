@@ -3,14 +3,8 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { Viewer } from '../requests/requests.repository';
 
-// O Postgres promove SUM(bigint) para NUMERIC (evita estourar 64 bits somando
-// muitas linhas BIGINT) — e por isso o driver do Prisma devolve essas três
-// colunas como Prisma.Decimal, não bigint, mesmo com COALESCE(...,0).
-// Confirmado rodando a query contra o Postgres real e inspecionando o valor
-// (`instanceof Prisma.Decimal` true, `typeof` "object"), não assumido pela
-// tipagem do enunciado: o brief tipava as três junto com as contagens como
-// bigint, o que compilava (TypeScript não confere isso em runtime) mas
-// mascarava o tipo verdadeiro. COUNT(*) já devolve bigint de verdade.
+// SUM(bigint) vira NUMERIC no Postgres, que o driver do Prisma devolve como
+// Prisma.Decimal; COUNT(*) devolve bigint.
 interface RawRow {
   pending_amount_cents: Prisma.Decimal;
   approved_amount_cents: Prisma.Decimal;
@@ -35,14 +29,8 @@ interface Row {
   paid_count: bigint;
 }
 
-// SUM(amount_cents) nunca deveria ter parte fracionária: amount_cents é
-// BIGINT e cada parcela somada já é um inteiro exato de centavos. O
-// Postgres só promove o tipo do resultado para NUMERIC por causa do range,
-// não porque introduz fração. Um resultado fracionário aqui só pode
-// significar corrupção de dado ou uma mudança de schema que este código não
-// previu — lançar nomeando o valor, em vez de arredondar em silêncio, é a
-// mesma regra do projeto que levou BigIntInterceptor.convert() a lançar
-// acima de Number.MAX_SAFE_INTEGER em vez de truncar (Tarefa 7).
+// Uma soma de centavos inteiros nunca tem fração; se tiver, é dado corrompido
+// e lançar é melhor que arredondar em silêncio.
 function decimalToBigInt(value: Prisma.Decimal): bigint {
   if (!value.isInteger()) {
     throw new Error(
@@ -67,17 +55,23 @@ export class DashboardRepository {
         ? Prisma.sql`TRUE`
         : Prisma.sql`requester_id = ${viewer.id}::uuid`;
 
-    // Uma varredura para os quatro indicadores. A conversão de fuso acontece
-    // em SQL: trazer as linhas e somar em JavaScript erraria na virada do mês
-    // e seria N+1 disfarçado.
+    // Contagens e pendente/aprovado numa varredura só. O pago no mês é uma
+    // subconsulta com intervalo [início do mês, início do seguinte) no fuso
+    // da aplicação, calculado em SQL: sem to_char por linha, o predicado
+    // usa o índice parcial requests_paid_at_idx.
+    const monthStart = `${month}-01`;
     const [row] = await this.prisma.$queryRaw<RawRow[]>`
       SELECT
         COALESCE(SUM(amount_cents) FILTER (WHERE status = 'PENDING'), 0)  AS pending_amount_cents,
         COALESCE(SUM(amount_cents) FILTER (WHERE status = 'APPROVED'), 0) AS approved_amount_cents,
-        COALESCE(SUM(amount_cents) FILTER (
-          WHERE status = 'PAID'
-            AND to_char(paid_at AT TIME ZONE ${zone}, 'YYYY-MM') = ${month}
-        ), 0) AS paid_this_month_amount_cents,
+        (
+          SELECT COALESCE(SUM(amount_cents), 0)
+          FROM requests
+          WHERE ${scope}
+            AND status = 'PAID'
+            AND paid_at >= ${monthStart}::date::timestamp AT TIME ZONE ${zone}
+            AND paid_at < (${monthStart}::date + interval '1 month') AT TIME ZONE ${zone}
+        ) AS paid_this_month_amount_cents,
         COUNT(*) FILTER (
           WHERE status IN ('PENDING','APPROVED') AND due_date < ${today}::date
         ) AS overdue_count,
@@ -90,11 +84,7 @@ export class DashboardRepository {
       WHERE ${scope}
     `;
 
-    // O agregado sempre devolve uma linha (COUNT/SUM sobre zero linhas ainda
-    // é uma linha, com 0), então um undefined aqui só pode significar um erro
-    // de driver/tipagem, nunca "sem dados" — a regra do projeto proíbe
-    // devolver algo fora do tipo declarado, então isto lança em vez de
-    // deixar o service explodir mais adiante com "row is undefined".
+    // Agregado sem GROUP BY sempre devolve uma linha; sem ela, é erro de driver.
     if (!row) {
       throw new Error('dashboard aggregate query returned no rows');
     }

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
@@ -80,12 +81,8 @@ describe('seed', () => {
   });
 
   it('stores every request field exactly as provided', async () => {
-    // category compara contra a coluna crua, não contra toRequestCategory():
-    // comparar com o resultado da própria função sob teste é tautológico —
-    // se um mapeamento em CATEGORY_BY_LABEL estiver trocado, os dois lados
-    // do assert erram do mesmo jeito e o teste passa com o dado corrompido.
-    // A coluna crua (o valor que o @map grava, com cedilha) não passa por
-    // esse mapeamento, então uma troca no Map quebra este assert.
+    // Coluna crua, não toRequestCategory(): comparar com a própria função
+    // sob teste não pegaria um mapeamento trocado.
     const rawCategories = await prisma.$queryRaw<
       Array<{ id: string; category: string }>
     >`
@@ -172,11 +169,7 @@ describe('seed', () => {
       expect(await argon2.verify(stored.passwordHash, user.seed_password)).toBe(
         true,
       );
-      // argon2.verify() detecta a variante (argon2i/argon2id/argon2d) a
-      // partir do próprio hash — trocar prisma/seed.ts para um argon2.hash()
-      // sem `type` (que usa argon2i por padrão) passaria pelo assert acima
-      // sem que nada aqui notasse. Fixar o prefixo é o que realmente prende
-      // argon2id como a variante exigida pelo projeto.
+      // verify() aceita qualquer variante; o prefixo prende argon2id.
       expect(stored.passwordHash.startsWith('$argon2id$')).toBe(true);
     }
   });
@@ -190,6 +183,44 @@ describe('seed', () => {
     expect(await prisma.requestStatusEvent.count()).toBe(
       read<SeedAuditEventRow>('seed_audit_events.json').length,
     );
+  });
+
+  // O seed roda a cada boot do container: não pode desfazer o que a aplicação
+  // gravou nem deixar a auditoria incoerente com o status.
+  it('preserves changes made after the first run', async () => {
+    const target = '20000000-0000-4000-8000-000000000001';
+    const financeId = '10000000-0000-4000-8000-000000000003';
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { id: financeId },
+    });
+
+    await prisma.request.update({
+      where: { id: target },
+      data: { status: 'APPROVED' },
+    });
+    await prisma.requestStatusEvent.create({
+      data: {
+        id: randomUUID(),
+        requestId: target,
+        actorId: financeId,
+        previousStatus: 'PENDING',
+        newStatus: 'APPROVED',
+      },
+    });
+
+    await seed(prisma);
+
+    const stored = await prisma.request.findUniqueOrThrow({
+      where: { id: target },
+      include: { events: { orderBy: { createdAt: 'desc' } } },
+    });
+    expect(stored.status).toBe('APPROVED');
+    expect(stored.events[0].newStatus).toBe('APPROVED');
+    // Sem recalcular argon2 para quem já existe.
+    expect(
+      (await prisma.user.findUniqueOrThrow({ where: { id: financeId } }))
+        .passwordHash,
+    ).toBe(user.passwordHash);
   });
 
   it('keeps paid_at distinct from created_at', async () => {
