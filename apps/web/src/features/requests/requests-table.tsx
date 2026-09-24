@@ -1,6 +1,7 @@
 import { formatCnpj, type RequestResponse } from '@gex/shared'
 import { FilePlusIcon, InboxIcon, PlusIcon, SearchXIcon, XIcon } from 'lucide-react'
 import Link from 'next/link'
+import { StatusBadge } from '@/components/status/status-badge'
 import { Button } from '@/components/ui/button'
 import {
   Empty,
@@ -22,7 +23,6 @@ import {
 import { formatCalendarDate } from '@/lib/format/dates'
 import { formatBrl } from '@/lib/format/money'
 import { cn } from '@/lib/utils'
-import { StatusBadge } from './status-badge'
 
 type RequestsTableProps = {
   rows: RequestResponse[]
@@ -32,12 +32,9 @@ type RequestsTableProps = {
   canCreate?: boolean
 }
 
-// Uma única marcação serve às duas larguras. No desktop é uma tabela comum;
-// abaixo de md cada linha vira um bloco em grade (fornecedor e valor no topo,
-// nota e vencimento, status e solicitante), porque rolar seis colunas de lado
-// num celular esconderia justamente valor e status, o que se procura primeiro.
-// Classes de cada coluna, compartilhadas com o esqueleto de carregamento para
-// que ele tenha exatamente a forma da tabela nas duas larguras.
+// Uma marcação para as duas larguras: tabela no desktop; no celular cada linha
+// vira um bloco, porque rolar seis colunas de lado esconderia valor e status.
+// As classes são compartilhadas com o esqueleto de carregamento.
 const ROW =
   'max-md:grid max-md:grid-cols-[minmax(0,1fr)_auto] max-md:gap-x-4 max-md:gap-y-1.5 max-md:px-4 max-md:py-3.5'
 const CELL = {

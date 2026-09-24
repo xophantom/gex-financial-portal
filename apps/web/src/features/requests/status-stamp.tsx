@@ -1,8 +1,8 @@
 import type { RequestStatus } from '@gex/shared'
 import type { CSSProperties } from 'react'
+import { STATUS_STYLE } from '@/components/status/status-style'
 import { statusLabel } from '@/lib/format/labels'
 import { cn } from '@/lib/utils'
-import { STATUS_STYLE } from './status-style'
 
 // A palavra do carimbo físico: masculino ("o documento"), em caixa alta
 // porque é assim que a borracha imprime. É o único texto em caixa alta da

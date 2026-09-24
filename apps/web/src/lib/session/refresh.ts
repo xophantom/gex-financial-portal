@@ -4,26 +4,19 @@ import { API_BASE_URL } from '@/lib/api/base-url'
 // Troca do refresh token por um par novo. Não depende de next/headers: roda
 // tanto no proxy (guard.ts) quanto no BFF (lib/api/client.ts).
 
-// Sem prazo, um /auth/refresh que trava (API caiu no meio da resposta, rede
-// pendurada) nunca resolve nem rejeita: a promise fica presa para sempre no
-// mapa de refreshOnce, e todo mundo que compartilha aquela chave (mesma
-// sessão) espera indefinidamente. O AbortSignal força a rejeição, o
-// finally() de refreshOnce libera a chave, e uma tentativa seguinte ainda
-// pode suceder.
+// Sem prazo, um refresh travado prenderia para sempre todas as chamadas da
+// mesma sessão que aguardam em refreshOnce.
 const REFRESH_TIMEOUT_MS = 5000
 
-export class RefreshFailedError extends Error {
+class RefreshFailedError extends Error {
   constructor() {
     super('Sessão expirada')
   }
 }
 
-// Map, não uma única variável de módulo: um worker Node atende requisições de
-// vários usuários ao mesmo tempo, sobre o mesmo módulo carregado uma vez só.
-// Uma trava global coalesceria o refresh de um usuário com o de outro, e quem
-// perdesse a corrida receberia o token de acesso de outra conta. A chave é o
-// próprio refresh token: identifica a sessão de forma única, é o mesmo valor
-// para chamadas concorrentes do mesmo usuário e nunca colide entre usuários.
+// Uma promessa por sessão (a chave é o refresh token): o módulo é compartilhado
+// por todos os usuários do worker, e uma trava global entregaria a quem
+// perdesse a corrida o token de outra conta.
 const pendingRefreshes = new Map<string, Promise<unknown>>()
 
 export async function refreshOnce<T>(key: string, refresh: () => Promise<T>): Promise<T> {

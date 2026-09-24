@@ -1,5 +1,5 @@
 import type { DashboardSummaryResponse, RequestStatus } from '@gex/shared'
-import { STATUS_STYLE } from '@/features/requests/status-style'
+import { STATUS_STYLE } from '@/components/status/status-style'
 import { formatBrl } from '@/lib/format/money'
 import { cn } from '@/lib/utils'
 import { monthLabel } from './action-summary'

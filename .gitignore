@@ -17,7 +17,7 @@ apps/web/next-env.d.ts
 .idea/
 .vscode/
 
-# gerados pelo `next dev` para agentes de IA
+# gerados pelo `next dev`
 apps/web/AGENTS.md
 apps/web/CLAUDE.md
 

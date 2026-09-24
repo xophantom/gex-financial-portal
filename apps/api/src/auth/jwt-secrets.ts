@@ -1,9 +1,5 @@
-// Falha rápida de propósito: um valor padrão aqui seria um segredo previsível
-// e público (documentado no próprio repositório, em .env.example), o que
-// permitiria forjar um token para qualquer usuário e qualquer papel contra
-// qualquer deploy que esquecesse de configurar a env var — inclusive um
-// token FINANCE capaz de aprovar e marcar solicitações como pagas. Preferível
-// o processo nem subir do que servir tokens sob um segredo conhecido.
+// Sem valor padrão: um segredo previsível permitiria forjar tokens (inclusive
+// FINANCE) em qualquer deploy que esquecesse a variável. Melhor não subir.
 function requireEnv(name: 'JWT_SECRET' | 'JWT_REFRESH_SECRET'): string {
   const value = process.env[name]
   if (!value) {
@@ -13,10 +9,8 @@ function requireEnv(name: 'JWT_SECRET' | 'JWT_REFRESH_SECRET'): string {
   return value
 }
 
-// Funções, não constantes de módulo: precisam ler process.env no momento em
-// que o Nest resolve o provider (compile()/create()), não em quando este
-// arquivo é importado — testes só definem a env var depois de subir os
-// containers descartáveis, e o import de AppModule acontece antes disso.
+// Funções, não constantes: leem process.env quando o Nest resolve o provider,
+// porque os testes só definem as variáveis depois de importar o AppModule.
 export function resolveJwtSecret(): string {
   return requireEnv('JWT_SECRET')
 }

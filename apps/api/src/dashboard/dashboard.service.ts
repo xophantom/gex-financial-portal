@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common'
+import { OnEvent } from '@nestjs/event-emitter'
 import type { DashboardSummaryResponse } from '@gex/shared'
 import type { AuthenticatedUser } from '../auth/authenticated-user'
 import { toSafeNumber } from '../common/utils/to-safe-number'
 import { ClockService } from '../infra/clock/clock.service'
 import { RedisService } from '../infra/redis/redis.service'
+import { REQUESTS_CHANGED } from '../requests/requests.events'
 import { DashboardRepository } from './dashboard.repository'
 
 const CACHE_TTL_SECONDS = 60
@@ -70,6 +72,7 @@ export class DashboardService {
   // Muda a geração em vez de apagar chaves: entradas antigas ficam
   // inalcançáveis e expiram pelo TTL. Com o Redis fora o INCR se perde, e o
   // pior caso é o cache antigo durar até o fim do TTL quando ele voltar.
+  @OnEvent(REQUESTS_CHANGED)
   async invalidate(): Promise<void> {
     await this.redis.incrBy(GENERATION_KEY, 1)
   }

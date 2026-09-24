@@ -1,7 +1,7 @@
 import type { RequestStatus } from '@gex/shared'
 import { ChevronRight } from 'lucide-react'
 import Link from 'next/link'
-import { STATUS_STYLE } from '@/features/requests/status-style'
+import { STATUS_STYLE } from '@/components/status/status-style'
 import { statusLabel } from '@/lib/format/labels'
 import { cn } from '@/lib/utils'
 import { pluralize } from './action-summary'
@@ -12,7 +12,7 @@ const ORDER: RequestStatus[] = ['PENDING', 'APPROVED', 'PAID', 'REJECTED']
 
 const percent = new Intl.NumberFormat('pt-BR', { style: 'percent', maximumFractionDigits: 0 })
 
-export function statusHref(status: RequestStatus): string {
+function statusHref(status: RequestStatus): string {
   return `/requests?status=${status}`
 }
 

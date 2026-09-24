@@ -28,18 +28,11 @@ export interface TestApp {
   startRedis(): Promise<void>
 }
 
-// Segredo fixo de propósito: o container de teste é descartável e recriado
-// a cada suíte, então não existe "segredo de produção" a proteger aqui —
-// só precisa ser estável o bastante para assinar e verificar dentro do
-// mesmo processo de teste.
+// Segredos fixos: o ambiente de teste é descartável.
 const TEST_JWT_SECRET = 'test-jwt-secret'
 const TEST_JWT_REFRESH_SECRET = 'test-jwt-refresh-secret'
-// Mesmo valor fixo do smoke test (scripts/smoke-test.ts): sem isto,
-// ClockService cai para a data real do relógio (Global module, instanciado
-// eagerly no compile()), e qualquer asserção de "vencido" no seed vira uma
-// bomba-relógio que só falha no dia em que a data real ultrapassa os
-// vencimentos fixos do seed — exatamente o tipo de acoplamento que
-// ClockService existe para eliminar.
+// Data de referência fixa: com o relógio real, as asserções de "vencida"
+// sobre o seed quebrariam com o passar dos dias.
 const TEST_APP_TODAY = '2026-09-18'
 
 export async function createTestApp(): Promise<TestApp> {

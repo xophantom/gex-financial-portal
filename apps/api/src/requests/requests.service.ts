@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common'
+import { EventEmitter2 } from '@nestjs/event-emitter'
 import {
   allowedActionsFor,
   canTransition,
@@ -16,16 +17,11 @@ import { Prisma } from '@prisma/client'
 import type { AuthenticatedUser } from '../auth/authenticated-user'
 import { AppException } from '../common/errors/app.exception'
 import { dateInZone, offsetFor } from '../common/utils/timezone'
-import { toSafeNumber } from '../common/utils/to-safe-number'
-import { DashboardService } from '../dashboard/dashboard.service'
 import { ClockService } from '../infra/clock/clock.service'
 import { IdempotencyService } from './idempotency.service'
-import { fromPrismaCategory } from './request-category.mapper'
+import { toRequestResponse, toStatusEventResponse } from './request-response.mapper'
 import { RequestsRepository } from './requests.repository'
-
-type RequestWithRequester = Prisma.RequestGetPayload<{
-  include: { requester: { select: { id: true; name: true } } }
-}>
+import { REQUESTS_CHANGED } from './requests.events'
 
 // Nomes de coluna como o Prisma os relata em meta.target num P2002.
 const DUPLICATE_INVOICE_COLUMNS = ['supplier_cnpj', 'invoice_number']
@@ -57,7 +53,7 @@ export class RequestsService {
     private readonly repository: RequestsRepository,
     private readonly clock: ClockService,
     private readonly idempotency: IdempotencyService,
-    private readonly dashboard: DashboardService,
+    private readonly events: EventEmitter2,
   ) {}
 
   async list(query: ListRequestsQuery, viewer: AuthenticatedUser): Promise<RequestListResponse> {
@@ -65,7 +61,7 @@ export class RequestsService {
     const today = this.clock.today()
 
     return {
-      data: data.map((row) => this.toResponse(row, today)),
+      data: data.map((row) => toRequestResponse(row, today)),
       page: query.page,
       page_size: query.page_size,
       total,
@@ -96,14 +92,14 @@ export class RequestsService {
       throw error
     })
 
-    const response = this.toResponse(created, this.clock.today())
+    const response = toRequestResponse(created, this.clock.today())
     if (idempotencyKey) {
       await this.idempotency.remember(requester.id, idempotencyKey, fingerprint!, response)
     }
 
     // Depois do commit e nunca lança (Redis é melhor esforço): uma falha aqui
     // não pode transformar uma escrita gravada em erro para o cliente.
-    await this.dashboard.invalidate()
+    await this.events.emitAsync(REQUESTS_CHANGED)
 
     return response
   }
@@ -116,15 +112,8 @@ export class RequestsService {
     }
 
     return {
-      request: this.toResponse(found, this.clock.today()),
-      history: found.events.map((event) => ({
-        id: event.id,
-        previous_status: event.previousStatus,
-        new_status: event.newStatus,
-        reason: event.reason,
-        created_at: event.createdAt.toISOString(),
-        actor: { id: event.actor.id, name: event.actor.name },
-      })),
+      request: toRequestResponse(found, this.clock.today()),
+      history: found.events.map(toStatusEventResponse),
       allowed_actions: allowedActionsFor(found.status, viewer.role),
     }
   }
@@ -146,9 +135,9 @@ export class RequestsService {
       }
     })
 
-    await this.dashboard.invalidate()
+    await this.events.emitAsync(REQUESTS_CHANGED)
 
-    return this.toResponse(updated, this.clock.today())
+    return toRequestResponse(updated, this.clock.today())
   }
 
   async markPaid(
@@ -188,9 +177,9 @@ export class RequestsService {
       }
     })
 
-    await this.dashboard.invalidate()
+    await this.events.emitAsync(REQUESTS_CHANGED)
 
-    return this.toResponse(updated, this.clock.today())
+    return toRequestResponse(updated, this.clock.today())
   }
 
   private assertTransition(from: RequestStatus, to: RequestStatus): void {
@@ -200,32 +189,6 @@ export class RequestsService {
         `Não é possível mudar de ${from} para ${to}`,
         409,
       )
-    }
-  }
-
-  private toResponse(row: RequestWithRequester, today: string): RequestResponse {
-    const dueDate = row.dueDate.toISOString().slice(0, 10)
-
-    return {
-      id: row.id,
-      supplier_name: row.supplierName,
-      supplier_cnpj: row.supplierCnpj,
-      invoice_number: row.invoiceNumber,
-      amount_cents: toSafeNumber(row.amountCents),
-      competence: row.competence,
-      due_date: dueDate,
-      category: fromPrismaCategory(row.category),
-      description: row.description,
-      status: row.status,
-      rejection_reason: row.rejectionReason,
-      paid_at: row.paidAt?.toISOString() ?? null,
-      payment_reference: row.paymentReference,
-      // Calculado no servidor contra a mesma data do dashboard: se a interface
-      // calculasse, lista e dashboard poderiam discordar sobre o total vencido.
-      is_overdue: (row.status === 'PENDING' || row.status === 'APPROVED') && dueDate < today,
-      requester: { id: row.requester.id, name: row.requester.name },
-      created_at: row.createdAt.toISOString(),
-      updated_at: row.updatedAt.toISOString(),
     }
   }
 }
