@@ -47,6 +47,12 @@ function paidAtError(message: string): AppException {
   return new AppException('VALIDATION_ERROR', message, 422, [{ field: 'paid_at', message }])
 }
 
+// AAAA-MM-DD → DD/MM/AAAA, para as mensagens de erro.
+function toBrDate(isoDate: string): string {
+  const [year, month, day] = isoDate.split('-')
+  return `${day}/${month}/${year}`
+}
+
 @Injectable()
 export class RequestsService {
   constructor(
@@ -111,10 +117,13 @@ export class RequestsService {
       throw new AppException('NOT_FOUND', 'Solicitação não encontrada', 404)
     }
 
+    const today = this.clock.today()
+
     return {
-      request: toRequestResponse(found, this.clock.today()),
+      request: toRequestResponse(found, today),
       history: found.events.map(toStatusEventResponse),
       allowed_actions: allowedActionsFor(found.status, viewer.role),
+      reference_date: today,
     }
   }
 
@@ -146,11 +155,12 @@ export class RequestsService {
     actor: AuthenticatedUser,
   ): Promise<RequestResponse> {
     const zone = this.clock.timezone()
+    const today = this.clock.today()
 
     // AAAA-MM-DD compara como string; hoje e a criação são datas civis no
     // fuso da aplicação, não em UTC.
-    if (input.paid_at > this.clock.today()) {
-      throw paidAtError('A data de pagamento não pode ser futura')
+    if (input.paid_at > today) {
+      throw paidAtError(`A data de pagamento não pode ser posterior a hoje (${toBrDate(today)})`)
     }
 
     // Meio-dia, não meia-noite: longe da virada do dia, nenhuma conversão de
@@ -161,11 +171,17 @@ export class RequestsService {
       this.assertTransition(current.status, 'PAID')
 
       // Com APP_TODAY no passado, uma solicitação criada agora nasce "depois de
-      // hoje"; sem limitar pela data de referência, nenhuma data seria aceita.
+      // hoje": o único dia possível é a própria data de referência.
       const createdOn = dateInZone(current.createdAt, zone)
-      const earliest = createdOn < this.clock.today() ? createdOn : this.clock.today()
-      if (input.paid_at < earliest) {
-        throw paidAtError('A data de pagamento não pode ser anterior à criação da solicitação')
+      if (createdOn > today && input.paid_at !== today) {
+        throw paidAtError(
+          `Esta solicitação foi criada depois da data de referência; registre o pagamento em ${toBrDate(today)}`,
+        )
+      }
+      if (createdOn <= today && input.paid_at < createdOn) {
+        throw paidAtError(
+          `A data de pagamento não pode ser anterior à criação da solicitação (${toBrDate(createdOn)})`,
+        )
       }
 
       return {

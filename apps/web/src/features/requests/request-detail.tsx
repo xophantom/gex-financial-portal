@@ -39,10 +39,12 @@ export function RequestDetail({
   request,
   history,
   allowedActions,
+  referenceDate,
 }: {
   request: RequestResponse
   history: StatusEventResponse[]
   allowedActions: RequestAction[]
+  referenceDate: string
 }) {
   const router = useRouter()
   const [openDialog, setOpenDialog] = useState<RequestAction | null>(null)
@@ -177,6 +179,7 @@ export function RequestDetail({
           onOpenChange={(open) => !open && closeDialog()}
           requestId={request.id}
           supplierName={request.supplier_name}
+          referenceDate={referenceDate}
           onSuccess={() => handleSuccess('MARK_PAID')}
         />
       )}

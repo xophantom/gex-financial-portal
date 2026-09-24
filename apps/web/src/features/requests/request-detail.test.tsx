@@ -29,7 +29,12 @@ beforeEach(() => {
 describe('RequestDetail — action gating', () => {
   it('renders every action allowed_actions grants', () => {
     render(
-      <RequestDetail request={baseRequest} history={[]} allowedActions={['APPROVE', 'REJECT']} />,
+      <RequestDetail
+        referenceDate="2026-09-18"
+        request={baseRequest}
+        history={[]}
+        allowedActions={['APPROVE', 'REJECT']}
+      />,
     )
 
     expect(screen.getByRole('button', { name: /aprovar/i })).toBeInTheDocument()
@@ -38,7 +43,14 @@ describe('RequestDetail — action gating', () => {
   })
 
   it('renders no action button when allowed_actions is empty', () => {
-    render(<RequestDetail request={baseRequest} history={[]} allowedActions={[]} />)
+    render(
+      <RequestDetail
+        referenceDate="2026-09-18"
+        request={baseRequest}
+        history={[]}
+        allowedActions={[]}
+      />,
+    )
 
     expect(screen.queryAllByRole('button')).toHaveLength(0)
   })
@@ -46,6 +58,7 @@ describe('RequestDetail — action gating', () => {
   it('renders only mark-paid when that is the sole allowed action', () => {
     render(
       <RequestDetail
+        referenceDate="2026-09-18"
         request={{ ...baseRequest, status: 'APPROVED' }}
         history={[]}
         allowedActions={['MARK_PAID']}
@@ -60,18 +73,33 @@ describe('RequestDetail — action gating', () => {
 
 describe('RequestDetail — fields', () => {
   it('highlights the amount as BRL', () => {
-    render(<RequestDetail request={baseRequest} history={[]} allowedActions={[]} />)
+    render(
+      <RequestDetail
+        referenceDate="2026-09-18"
+        request={baseRequest}
+        history={[]}
+        allowedActions={[]}
+      />,
+    )
     expect(screen.getByText('R$ 1.250,00')).toBeInTheDocument()
   })
 
   it('shows the due date as DD/MM/AAAA', () => {
-    render(<RequestDetail request={baseRequest} history={[]} allowedActions={[]} />)
+    render(
+      <RequestDetail
+        referenceDate="2026-09-18"
+        request={baseRequest}
+        history={[]}
+        allowedActions={[]}
+      />,
+    )
     expect(screen.getByText('10/09/2026')).toBeInTheDocument()
   })
 
   it('shows the category as a plain word, not the API code', () => {
     render(
       <RequestDetail
+        referenceDate="2026-09-18"
         request={{ ...baseRequest, category: 'INFRAESTRUTURA' }}
         history={[]}
         allowedActions={[]}
@@ -83,6 +111,7 @@ describe('RequestDetail — fields', () => {
   it('flags an overdue request in words, not only in color', () => {
     render(
       <RequestDetail
+        referenceDate="2026-09-18"
         request={{ ...baseRequest, is_overdue: true }}
         history={[]}
         allowedActions={[]}
@@ -96,6 +125,7 @@ describe('RequestDetail — fields', () => {
   it('flags an overdue request that is already approved', () => {
     render(
       <RequestDetail
+        referenceDate="2026-09-18"
         request={{ ...baseRequest, status: 'APPROVED', is_overdue: true }}
         history={[]}
         allowedActions={[]}
@@ -105,13 +135,21 @@ describe('RequestDetail — fields', () => {
   })
 
   it('does not flag a request that is not overdue', () => {
-    render(<RequestDetail request={baseRequest} history={[]} allowedActions={[]} />)
+    render(
+      <RequestDetail
+        referenceDate="2026-09-18"
+        request={baseRequest}
+        history={[]}
+        allowedActions={[]}
+      />,
+    )
     expect(screen.queryByText('Vencida')).not.toBeInTheDocument()
   })
 
   it('shows the rejection reason', () => {
     render(
       <RequestDetail
+        referenceDate="2026-09-18"
         request={{ ...baseRequest, status: 'REJECTED', rejection_reason: 'CNPJ de outra filial' }}
         history={[]}
         allowedActions={[]}
@@ -125,6 +163,7 @@ describe('RequestDetail — fields', () => {
   it('shows only the São Paulo date for paid_at', () => {
     render(
       <RequestDetail
+        referenceDate="2026-09-18"
         request={{
           ...baseRequest,
           status: 'PAID',
@@ -144,7 +183,14 @@ describe('RequestDetail — fields', () => {
 
 describe('RequestDetail — status stamp', () => {
   it('announces the status as text to screen readers', () => {
-    render(<RequestDetail request={baseRequest} history={[createdEvent]} allowedActions={[]} />)
+    render(
+      <RequestDetail
+        referenceDate="2026-09-18"
+        request={baseRequest}
+        history={[createdEvent]}
+        allowedActions={[]}
+      />,
+    )
 
     // O carimbo é decorativo (aria-hidden); o status existe como texto.
     expect(screen.getByText('Status: Pendente desde 10/08/2026')).toBeInTheDocument()
@@ -153,6 +199,7 @@ describe('RequestDetail — status stamp', () => {
   it('prints the payment date on a paid stamp', () => {
     render(
       <RequestDetail
+        referenceDate="2026-09-18"
         request={{ ...baseRequest, status: 'PAID', paid_at: '2026-09-20T15:00:00.000Z' }}
         history={[createdEvent]}
         allowedActions={[]}
@@ -166,7 +213,14 @@ describe('RequestDetail — status stamp', () => {
 
 describe('RequestDetail — dialog', () => {
   it('focuses the first field when the dialog opens and closes on Escape', async () => {
-    render(<RequestDetail request={baseRequest} history={[]} allowedActions={['REJECT']} />)
+    render(
+      <RequestDetail
+        referenceDate="2026-09-18"
+        request={baseRequest}
+        history={[]}
+        allowedActions={['REJECT']}
+      />,
+    )
     const trigger = screen.getByRole('button', { name: /rejeitar/i })
 
     await userEvent.click(trigger)
@@ -179,13 +233,19 @@ describe('RequestDetail — dialog', () => {
 
   it('does not carry an open dialog over to another request', async () => {
     const { unmount } = render(
-      <RequestDetail request={baseRequest} history={[]} allowedActions={['APPROVE']} />,
+      <RequestDetail
+        referenceDate="2026-09-18"
+        request={baseRequest}
+        history={[]}
+        allowedActions={['APPROVE']}
+      />,
     )
     await userEvent.click(screen.getByRole('button', { name: /aprovar/i }))
     unmount()
 
     render(
       <RequestDetail
+        referenceDate="2026-09-18"
         request={{ ...baseRequest, id: 'other' }}
         history={[]}
         allowedActions={['APPROVE']}
@@ -196,7 +256,14 @@ describe('RequestDetail — dialog', () => {
 
   it('confirms with the action verb and refreshes the page after success', async () => {
     vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({}) } as Response)
-    render(<RequestDetail request={baseRequest} history={[]} allowedActions={['APPROVE']} />)
+    render(
+      <RequestDetail
+        referenceDate="2026-09-18"
+        request={baseRequest}
+        history={[]}
+        allowedActions={['APPROVE']}
+      />,
+    )
 
     await userEvent.click(screen.getByRole('button', { name: /aprovar/i }))
     const dialog = await screen.findByRole('dialog', { name: 'Aprovar solicitação' })

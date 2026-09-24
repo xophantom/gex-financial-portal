@@ -135,6 +135,12 @@ describe('GET /requests/:id', () => {
     expect(body.allowed_actions).toEqual(['APPROVE', 'REJECT'])
   })
 
+  // A tela de pagamento usa esta data como padrão e como limite.
+  it('carries the reference date used by the calendar rules', async () => {
+    const body = await detailOf(finance, PENDING_OF_ANA)
+    expect(body.reference_date).toBe('2026-09-18')
+  })
+
   it('offers no action to the requester who owns it', async () => {
     const body = await detailOf(ana, PENDING_OF_ANA)
     expect(body.allowed_actions).toEqual([])
@@ -279,7 +285,10 @@ describe('POST /requests/:id/mark-paid', () => {
     const body = response.body as ErrorEnvelope
     expect(body.error.code).toBe('VALIDATION_ERROR')
     expect(body.error.details).toEqual([
-      { field: 'paid_at', message: 'A data de pagamento não pode ser futura' },
+      {
+        field: 'paid_at',
+        message: 'A data de pagamento não pode ser posterior a hoje (18/09/2026)',
+      },
     ])
   })
 
@@ -319,7 +328,7 @@ describe('POST /requests/:id/mark-paid', () => {
     expect(body.error.details).toEqual([
       {
         field: 'paid_at',
-        message: 'A data de pagamento não pode ser anterior à criação da solicitação',
+        message: 'A data de pagamento não pode ser anterior à criação da solicitação (17/08/2026)',
       },
     ])
     expect((await detailOf(finance, target)).request.status).toBe('APPROVED')
@@ -349,10 +358,13 @@ describe('POST /requests/:id/mark-paid', () => {
       },
     })
 
-    await markPaid(finance, created.id, {
+    const refused = await markPaid(finance, created.id, {
       paid_at: '2026-09-17',
       payment_reference: 'PAG-X',
     }).expect(422)
+    expect((refused.body as ErrorEnvelope).error.message).toBe(
+      'Esta solicitação foi criada depois da data de referência; registre o pagamento em 18/09/2026',
+    )
 
     await markPaid(finance, created.id, {
       paid_at: '2026-09-18',

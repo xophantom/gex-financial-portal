@@ -1,14 +1,18 @@
 'use client'
 
 import { useState } from 'react'
-import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { formatCalendarDate } from '@/lib/format/dates'
 import { ActionDialog } from './action-dialog'
 import { useActionSubmit } from './use-action-submit'
 
 export interface MarkPaidDialogProps {
   requestId: string
   supplierName: string
+  // "Hoje" para a API (APP_TODAY, quando definida): o padrão e o limite do
+  // campo, já que o relógio do navegador pode estar em outro dia.
+  referenceDate: string
   open: boolean
   onOpenChange: (open: boolean) => void
   onSuccess: () => void
@@ -20,11 +24,12 @@ type FieldErrors = Partial<Record<'paid_at' | 'payment_reference', string>>
 export function MarkPaidDialog({
   requestId,
   supplierName,
+  referenceDate,
   open,
   onOpenChange,
   onSuccess,
 }: MarkPaidDialogProps) {
-  const [paidAt, setPaidAt] = useState('')
+  const [paidAt, setPaidAt] = useState(referenceDate)
   const [paymentReference, setPaymentReference] = useState('')
   // Erros de preenchimento ficam em cada campo; o erro da API, no alerta.
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
@@ -66,9 +71,14 @@ export function MarkPaidDialog({
             id="paid_at"
             type="date"
             value={paidAt}
+            max={referenceDate}
             onChange={(event) => setPaidAt(event.target.value)}
-            {...invalidProps('paid_at')}
+            aria-invalid={fieldErrors.paid_at ? true : undefined}
+            aria-describedby={fieldErrors.paid_at ? 'paid_at-hint paid_at-error' : 'paid_at-hint'}
           />
+          <FieldDescription id="paid_at-hint">
+            Até hoje, {formatCalendarDate(referenceDate)}.
+          </FieldDescription>
           {fieldErrors.paid_at && <FieldError id="paid_at-error">{fieldErrors.paid_at}</FieldError>}
         </Field>
         <Field data-invalid={Boolean(fieldErrors.payment_reference) || undefined}>

@@ -50,6 +50,9 @@ export interface RequestDetailResponse {
   request: RequestResponse
   history: StatusEventResponse[]
   allowed_actions: RequestAction[]
+  // O "hoje" das regras de calendário (APP_TODAY, quando definida): o limite
+  // para a data de um pagamento.
+  reference_date: string
 }
 
 export interface DashboardSummaryResponse {
