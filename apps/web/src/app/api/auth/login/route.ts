@@ -13,6 +13,12 @@ export async function POST(request: Request) {
   const body = await parseBody(request, loginSchema)
   if (!body.ok) return body.response
 
+  // Sem repassar o IP de quem chamou, a API veria o deste container em todo
+  // login, e o limite por IP valeria para todos os usuários de uma vez. O Next
+  // preenche x-forwarded-for com o endereço do socket; atrás de um proxy, o
+  // último item da lista é o que o proxy mais próximo anexou.
+  const clientIp = request.headers.get('x-forwarded-for')?.split(',').at(-1)?.trim()
+
   let upstream: Response
   try {
     upstream = await fetch(`${API_BASE_URL}/auth/login`, {
@@ -20,6 +26,7 @@ export async function POST(request: Request) {
       headers: {
         'content-type': 'application/json',
         'x-correlation-id': randomUUID(),
+        ...(clientIp && { 'x-forwarded-for': clientIp }),
       },
       body: JSON.stringify(body.data),
       cache: 'no-store',

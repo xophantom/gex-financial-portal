@@ -1,5 +1,5 @@
 import type { Server } from 'node:http'
-import { INestApplication } from '@nestjs/common'
+import type { NestExpressApplication } from '@nestjs/platform-express'
 import { Test } from '@nestjs/testing'
 import { PrismaClient } from '@prisma/client'
 import request from 'supertest'
@@ -56,14 +56,14 @@ export async function createTestApp(): Promise<TestApp> {
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
   }).compile()
-  const app: INestApplication = moduleRef.createNestApplication()
+  const app = moduleRef.createNestApplication<NestExpressApplication>()
 
   // Mesma configuração de main.ts, para o app testado não divergir do real.
   configureApp(app)
 
   await app.init()
 
-  const server = app.getHttpServer() as Server
+  const server: Server = app.getHttpServer()
 
   return {
     server,
